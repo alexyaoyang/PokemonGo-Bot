@@ -19,7 +19,6 @@ class StepWalker(object):
             dest_lat,
             dest_lng
         )
-            
         self.speed = self.bot.config.walk_max - random() * (self.bot.config.walk_max - self.bot.config.walk_min)
 
         self.destLat = dest_lat
