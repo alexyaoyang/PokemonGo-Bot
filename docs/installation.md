@@ -11,6 +11,7 @@
 - [pip](https://pip.pypa.io/en/stable/installing/)
 - [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
 - [virtualenv](https://virtualenv.pypa.io/en/stable/installation/) (Recommended)
+- [hashing key](http://hashing.pogodev.org) - if you want use latest API, not the old, 0.45
 
 ### Easy installation
 1. Clone the git: `git clone https://github.com/PokemonGoF/PokemonGo-Bot`
@@ -32,14 +33,14 @@ for manual installation please refer to [here](https://github.com/PokemonGoF/Pok
 We do recommend Windows users to use [Docker](#docker) this will work much easier and smoother (also safer)
 
 ## Requirements
+- [hashing key](http://hashing.pogodev.org) - if you want use latest API, not the old, 0.45
 
 ### Easy Installation
 1. Download [PokemonGo-Bot-Install.bat](https://github.com/PokemonGoF/PokemonGo-Bot/blob/master/windows_bat/PokemonGo-Bot-Install.bat)
-2. Download `encrypt.so` and `encrypt.dll` or `encrypt_64.dll` to the same folder of the `PokemonGo-Bot-Install.bat`.
-3. Run `PokemonGo-Bot-install.bat`.
+2. Run `PokemonGo-Bot-install.bat`.
 After that has been done the bot will be installed.
-4. Run `PokemonGo-Bot-Configurator` to create auth.json, config.json and userdata.js.
-5. Run `PokemonGo-Bot-Start.bat`.
+3. Run `PokemonGo-Bot-Configurator` to create auth.json, config.json and userdata.js.
+4. Run `PokemonGo-Bot-Start.bat`.
 This will start the bot and the web interface.
 
 ### To update the bot
@@ -98,7 +99,7 @@ docker run --name=bot1-pokego --rm -it -v $(pwd)/configs/auth.json:/usr/src/app/
 >```
 docker run --name=bot1-pokego --rm -it -v $(pwd)/configs:/usr/src/app/configs -v $(pwd)/web/:/usr/src/app/web/ pokemongo-bot
 ```
-
+>
 
 Run a second container provided with the OpenPoGoBotWeb view:
 
@@ -107,6 +108,16 @@ docker run --name=bot1-pokegoweb --rm -it --volumes-from bot1-pokego -p 8000:800
 ```
 The OpenPoGoWeb will be served on `http://<your host>:8000`
 
+### Using proxy with docker:
+
+- https proxy
+ ```
+ docker run --name=bot1-pokego -e "https_proxy=https://PROXY_IP:PORT" --rm -it -v $(pwd)/configs:/usr/src/app/configs -v $(pwd)/web/:/usr/src/app/web/ pokemongocc-bot
+```
+- http proxy
+ ```
+ docker run --name=bot1-pokego -e "http_proxy=http://PROXY_IP:PORT" --rm -it -v $(pwd)/configs:/usr/src/app/configs -v $(pwd)/web/:/usr/src/app/web/ pokemongo-bot
+ ```
 
 ### Remarks for Windows
 
@@ -131,11 +142,11 @@ docker run --name=bot1-pokegoweb --rm -it --volumes-from bot1-pokego -p 8000:800
   docker-machine ip default
 ```
 
+
 Then, with your containers running and your host address, you can access the web view in your browser:
 
 `http://<your host address>:8000 (eg http://192.168.99.100:8000)`
- 
- 
+```
 #### Errors
 
 - An error occurred trying to connect:

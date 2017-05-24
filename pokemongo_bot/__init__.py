@@ -14,6 +14,7 @@ import Queue
 import threading
 import shelve
 import uuid
+import urllib2
 
 from geopy.geocoders import GoogleV3
 from pgoapi import PGoApi
@@ -40,8 +41,9 @@ from .tree_config_builder import MismatchTaskApiVersion
 from .tree_config_builder import TreeConfigBuilder
 from .inventory import init_inventory, player
 from sys import platform as _platform
-from pgoapi.protos.POGOProtos.Enums import BadgeType_pb2
-from pgoapi.exceptions import AuthException
+from pgoapi.protos.pogoprotos.enums import badge_type_pb2
+from pgoapi.exceptions import AuthException, NotLoggedInException, ServerSideRequestThrottlingException, ServerBusyOrOfflineException, NoPlayerPositionSetException, HashingOfflineException
+from pgoapi.hash_server import HashServer
 
 
 class FileIOException(Exception):
@@ -72,11 +74,17 @@ class PokemonGoBot(object):
 
     @property
     def stardust(self):
-        return filter(lambda y: y['name'] == 'STARDUST', self._player['currencies'])[0]['amount']
+        dust = filter(lambda y: y['name'] == 'STARDUST', self._player['currencies'])[0]
+        if 'amount' in dust:
+            return dust['amount']
+        else:
+            return 0
 
     @stardust.setter
     def stardust(self, value):
-        filter(lambda y: y['name'] == 'STARDUST', self._player['currencies'])[0]['amount'] = value
+        dust = filter(lambda y: y['name'] == 'STARDUST', self._player['currencies'])[0]
+        if 'amount' in dust:
+            dust['amount'] = value
 
     def __init__(self, db, config):
 
@@ -122,11 +130,14 @@ class PokemonGoBot(object):
         self.inventory_refresh_threshold = 10
         self.inventory_refresh_counter = 0
         self.last_inventory_refresh = time.time()
-        
+
         # Catch on/off
         self.catch_disabled = False
 
         self.capture_locked = False  # lock catching while moving to VIP pokemon
+        
+        # Inform bot if there's a response
+        self.empty_response = False
 
         client_id_file_path = os.path.join(_base_dir, 'data', 'mqtt_client_id')
         saved_info = shelve.open(client_id_file_path)
@@ -199,9 +210,13 @@ class PokemonGoBot(object):
         self.event_manager.register_event('api_error')
         self.event_manager.register_event('config_error')
 
+        self.event_manager.register_event('captcha')
+
         self.event_manager.register_event('login_started')
         self.event_manager.register_event('login_failed')
         self.event_manager.register_event('login_successful')
+
+        self.event_manager.register_event('niantic_warning')
 
         self.event_manager.register_event('set_start_location')
         self.event_manager.register_event('load_cached_location')
@@ -217,7 +232,6 @@ class PokemonGoBot(object):
         self.event_manager.register_event('buddy_pokemon', parameters=('pokemon', 'iv', 'cp'))
         self.event_manager.register_event('buddy_reward', parameters=('pokemon', 'family', 'candy_earned', 'candy'))
         self.event_manager.register_event('buddy_walked', parameters=('pokemon', 'distance_walked', 'distance_needed'))
-        self.event_manager.register_event('task_disabled', parameters=('task_name',))
 
         #  ignore candy above threshold
         self.event_manager.register_event(
@@ -228,6 +242,7 @@ class PokemonGoBot(object):
                 'threshold'
             )
         )
+        self.event_manager.register_event('followpath_output_disabled')
         self.event_manager.register_event(
             'position_update',
             parameters=(
@@ -253,6 +268,8 @@ class PokemonGoBot(object):
         )
 
         self.event_manager.register_event('location_cache_error')
+
+        self.event_manager.register_event('security_check')
 
         self.event_manager.register_event('bot_start')
         self.event_manager.register_event('bot_exit')
@@ -408,7 +425,8 @@ class PokemonGoBot(object):
                 'encounter_id',
                 'latitude',
                 'longitude',
-                'pokemon_id'
+                'pokemon_id',
+                'shiny'
             )
         )
         self.event_manager.register_event('no_pokeballs')
@@ -468,6 +486,22 @@ class PokemonGoBot(object):
             parameters=(
                 'pokemon',
                 'ncp', 'cp', 'iv', 'iv_display', 'exp',
+                'shiny',
+                'stardust',
+                'encounter_id',
+                'latitude',
+                'longitude',
+                'pokemon_id',
+                'daily_catch_limit',
+                'caught_last_24_hour',
+            )
+        )
+        self.event_manager.register_event(
+            'pokemon_vip_caught',
+            parameters=(
+                'pokemon',
+                'ncp', 'cp', 'iv', 'iv_display', 'exp',
+                'shiny',
                 'stardust',
                 'encounter_id',
                 'latitude',
@@ -479,7 +513,15 @@ class PokemonGoBot(object):
         )
         self.event_manager.register_event(
             'pokemon_evolved',
-            parameters=('pokemon', 'iv', 'cp', 'candy', 'xp')
+            parameters=('pokemon', 'new', 'iv', 'old_cp', 'cp', 'candy', 'xp')
+        )
+        self.event_manager.register_event(
+            'pokemon_favored',
+            parameters=('pokemon', 'iv', 'cp')
+        )
+        self.event_manager.register_event(
+            'pokemon_unfavored',
+            parameters=('pokemon', 'iv', 'cp')
         )
         self.event_manager.register_event(
             'pokemon_evolve_check',
@@ -487,12 +529,12 @@ class PokemonGoBot(object):
         )
         self.event_manager.register_event(
             'pokemon_upgraded',
-            parameters=('pokemon', 'iv', 'cp', 'candy', 'stardust')
+            parameters=('pokemon', 'iv', 'cp', 'new_cp', 'candy', 'stardust')
         )
         self.event_manager.register_event('skip_evolve')
         self.event_manager.register_event('threw_berry_failed', parameters=('status_code',))
         self.event_manager.register_event('vip_pokemon')
-        self.event_manager.register_event('gained_candy', parameters=('quantity', 'type'))
+        self.event_manager.register_event('gained_candy', parameters=('gained_candy', 'quantity', 'type'))
         self.event_manager.register_event('catch_limit')
         self.event_manager.register_event('spin_limit')
         self.event_manager.register_event('show_best_pokemon', parameters=('pokemons'))
@@ -725,11 +767,11 @@ class PokemonGoBot(object):
         self.event_manager.register_event('sniper_log', parameters=('message', 'message'))
         self.event_manager.register_event('sniper_error', parameters=('message', 'message'))
         self.event_manager.register_event('sniper_teleporting', parameters=('latitude', 'longitude', 'name'))
-        
+
         # Catch-limiter
         self.event_manager.register_event('catch_limit_on')
         self.event_manager.register_event('catch_limit_off')
-        
+
 
     def tick(self):
         self.health_record.heartbeat()
@@ -911,9 +953,14 @@ class PokemonGoBot(object):
                 self.api = ApiWrapper(config=self.config)
                 self.api.set_position(*position)
                 self.login()
-                self.api.activate_signature(self.get_encryption_lib())
+                #self.api.set_signature_lib(self.get_encryption_lib())
+                #self.api.set_hash_lib(self.get_hash_lib())
 
     def login(self):
+        status = {}
+        retry = 0 
+        quit_login = False
+        
         self.event_manager.emit(
             'login_started',
             sender=self,
@@ -922,20 +969,36 @@ class PokemonGoBot(object):
         )
         lat, lng = self.position[0:2]
         self.api.set_position(lat, lng, self.alt)  # or should the alt kept to zero?
+        
+        while not quit_login:
+            try:
+                self.api.login(
+                        self.config.auth_service,
+                        str(self.config.username),
+                        str(self.config.password))
+                # No exception, set quit_login = true
+                quit_login = True
+            except AuthException as e:
+                self.event_manager.emit(
+                        'login_failed',
+                        sender=self,
+                        level='info',
+                        formatted='Login process failed: {}'.format(e)
+                        )
+                # Exception encountered. Retry 3 times, everytime increase wait time 5 secs
+                retry += 1
+                sleeptime = retry*5
 
-        try:
-            self.api.login(
-                    self.config.auth_service,
-                    str(self.config.username),
-                    str(self.config.password))
-        except AuthException as e:
-            self.event_manager.emit(
-                    'login_failed',
-                    sender=self,
-                    level='info',
-                    formatted='Login process failed: {}'.format(e));
-
-            sys.exit()
+                self.event_manager.emit(
+                        'login_failed',
+                        sender=self,
+                        level='info',
+                        formatted="Retry {} time(s) for {} secs".format(retry,sleeptime)
+                        )
+                sleep(retry*5)
+                # Quit after 3rd tries
+                if retry == 3:
+                    sys.exit()
 
         with self.database as conn:
             c = conn.cursor()
@@ -959,30 +1022,162 @@ class PokemonGoBot(object):
             level='info',
             formatted="Login successful."
         )
+
+        # Start of security, to get various API Versions from different sources
+        # Get Official API
+        link = "https://pgorelease.nianticlabs.com/plfe/version"
+        f = urllib2.urlopen(link)
+        myfile = f.read()
+        f.close()
+        officalAPI = myfile[2:8]
+        self.event_manager.emit(
+            'security_check',
+            sender=self,
+            level='info',
+            formatted="Niantic Official API Version: {}".format(officalAPI)
+        )
+
+        link = "https://pokehash.buddyauth.com/api/hash/versions"
+        f = urllib2.urlopen(link)
+        myfile = f.read()
+        f.close()
+        bossland_hash_endpoint = myfile.split(",")
+        total_entry = int(len(bossland_hash_endpoint))
+        last_bossland_entry = bossland_hash_endpoint[total_entry-1]
+        bossland_lastestAPI = last_bossland_entry.split(":")[0].replace('\"','')
+        hashingAPI_temp = 0
+        self.event_manager.emit(
+            'security_check',
+            sender=self,
+            level='info',
+            formatted="Latest Bossland Hashing API Version: {}".format(bossland_lastestAPI)
+        )
+
+        if self.config.check_niantic_api is True:
+            if HashServer.endpoint == "":
+                self.event_manager.emit(
+                    'security_check',
+                    sender=self,
+                    level='info',
+                    formatted="Warning: Bot is running on legacy API"
+                )
+            else:
+                PGoAPI_hash_endpoint = HashServer.endpoint.split("com/",1)[1]
+                PGoAPI_hash_version = []
+                # Check if PGoAPI hashing is in Bossland versioning
+                bossland_hash_data = json.loads(myfile)
+
+                for version, endpoint in bossland_hash_data.items():
+                    if endpoint == PGoAPI_hash_endpoint:
+                        # Version should always be in this format x.xx.x
+                        # Check total len, if less than 4, pack a zero behind
+                        if len(version.replace('.','')) < 4:
+                            version = version + ".0"
+                        hashingAPI_temp = int(version.replace('.',''))
+                        # iOS versioning is always more than 1.19.0
+                        if hashingAPI_temp < 1190:
+                            PGoAPI_hash_version.append(version)
+                # assuming andorid versioning is always last entry
+                PGoAPI_hash_version.sort(reverse=True)
+                # covert official api version & hashing api version to numbers
+                officialAPI_int = int(officalAPI.replace('.',''))
+                hashingAPI_int = int(PGoAPI_hash_version[0].replace('.',''))
+
+                if hashingAPI_int < officialAPI_int:
+                    self.event_manager.emit(
+                        'security_check',
+                        sender=self,
+                        level='info',
+                        formatted="We have detected a Pokemon API Change. Latest Niantic Version is: {}. Program Exiting...".format(officalAPI)
+                    )
+                    sys.exit(1)
+                else:
+                    self.event_manager.emit(
+                        'security_check',
+                        sender=self,
+                        level='info',
+                        formatted="Current PGoAPI is using API Version: {}. Niantic API Check Pass".format(PGoAPI_hash_version[0])
+                    )
+
+        # When successful login, do a captcha check
+        #Basic Captcha detection, more to come
+        response_dict = self.api.check_challenge()
+        captcha_url = response_dict['responses']['CHECK_CHALLENGE']['challenge_url']
+        if len(captcha_url) > 1:
+            self.event_manager.emit(
+                'captcha',
+                sender=self,
+                level='critical',
+                formatted='Captcha Encountered, URL: {}'.format(captcha_url)
+            )
+            sys.exit(1)
+
+        self.event_manager.emit(
+            'captcha',
+            sender=self,
+            level='info',
+            formatted="Captcha Check Passed"
+        )
+
         self.heartbeat()
 
     def get_encryption_lib(self):
         if _platform == "Windows" or _platform == "win32":
             # Check if we are on 32 or 64 bit
             if sys.maxsize > 2**32:
-                file_name = 'encrypt_64.dll'
+                file_name = 'encrypt64.dll'
             else:
-                file_name = 'encrypt.dll'
-        else:
-            file_name = 'encrypt.so'
-
+                file_name = 'encrypt32.dll'
+        if _platform.lower() == "darwin":
+            file_name= 'libencrypt-osx-64.so'
+        if _platform.lower() == "linux" or _platform.lower() == "linux2":
+            file_name = 'libencrypt-linux-x86-64.so'
         if self.config.encrypt_location == '':
             path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
         else:
             path = self.config.encrypt_location
 
-        full_path = path + '/'+ file_name
-        if not os.path.isfile(full_path):
+        full_path = ''
+        if os.path.isfile(path + '/' + file_name): # check encrypt_location or local dir first
+            full_path = path + '/' + file_name
+        elif os.path.isfile(path + '/src/pgoapi/pgoapi/lib/' + file_name): # if not found, check pgoapi lib folder
+            full_path = path + '/src/pgoapi/pgoapi/lib/' + file_name
+
+        if full_path == '':
             self.logger.error(file_name + ' is not found! Please place it in the bots root directory or set encrypt_location in config.')
-            self.logger.info('Platform: '+ _platform + ' ' + file_name + ' directory: '+ path)
             sys.exit(1)
         else:
-            self.logger.info('Found '+ file_name +'! Platform: ' + _platform + ' ' + file_name + ' directory: ' + path)
+            self.logger.info('Found '+ file_name +'! Platform: ' + _platform + ' ' + file_name + ' directory: ' + full_path)
+
+        return full_path
+
+    def get_hash_lib(self):
+        if _platform == "Windows" or _platform == "win32":
+            # Check if we are on 32 or 64 bit
+            if sys.maxsize > 2**32:
+                file_name = 'niantichash64.dll'
+            else:
+                file_name = 'niantichash32.dll'
+        if _platform.lower() == "darwin":
+            file_name= 'libniantichash-macos-64.dylib'
+        if _platform.lower() == "linux" or _platform.lower() == "linux2":
+            file_name = 'libniantichash-linux-x86-64.so'
+        if self.config.encrypt_location == '':
+            path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        else:
+            path = self.config.encrypt_location
+
+        full_path = ''
+        if os.path.isfile(path + '/' + file_name): # check encrypt_location or local dir first
+            full_path = path + '/'+ file_name
+        elif os.path.isfile(path + '/src/pgoapi/pgoapi/lib/' + file_name): # if not found, check pgoapi lib folder
+            full_path = path + '/src/pgoapi/pgoapi/lib/' + file_name
+
+        if full_path == '':
+            self.logger.error(file_name + ' is not found! Please place it in the bots root directory or set encrypt_location in config.')
+            sys.exit(1)
+        else:
+            self.logger.info('Found '+ file_name +'! Platform: ' + _platform + ' ' + file_name + ' directory: ' + full_path)
 
         return full_path
 
@@ -996,7 +1191,9 @@ class PokemonGoBot(object):
         self.login()
         # chain subrequests (methods) into one RPC call
 
-        self.api.activate_signature(self.get_encryption_lib())
+        #self.api.set_signature_lib(self.get_encryption_lib())
+        #self.api.set_hash_lib(self.get_hash_lib())
+
         self.logger.info('')
         # send empty map_cells and then our position
         self.update_web_location()
@@ -1008,9 +1205,12 @@ class PokemonGoBot(object):
         # print('Response dictionary: \n\r{}'.format(json.dumps(response_dict, indent=2)))
         currency_1 = "0"
         currency_2 = "0"
+        warn = False
 
         if response_dict:
             self._player = response_dict['responses']['GET_PLAYER']['player_data']
+            if 'warn' in response_dict['responses']['GET_PLAYER']:
+                warn = response_dict['responses']['GET_PLAYER']['warn']
             player = self._player
         else:
             self.logger.info(
@@ -1061,8 +1261,8 @@ class PokemonGoBot(object):
 
         self.logger.info(
             'RazzBerries: ' + str(items_inventory.get(701).count) +
-            ' | BlukBerries: ' + str(items_inventory.get(702).count) +
-            ' | NanabBerries: ' + str(items_inventory.get(703).count))
+            ' | Nanab Berries: ' + str(items_inventory.get(703).count) +
+            ' | Pinap Berries: ' + str(items_inventory.get(705).count))
 
         self.logger.info(
             'LuckyEgg: ' + str(items_inventory.get(301).count) +
@@ -1083,6 +1283,23 @@ class PokemonGoBot(object):
         self.logger.info(
             'Revive: ' + str(items_inventory.get(201).count) +
             ' | MaxRevive: ' + str(items_inventory.get(202).count))
+
+        self.logger.info(
+            'Sun Stone: ' + str(items_inventory.get(1101).count) +
+            ' | Kings Rock: ' + str(items_inventory.get(1102).count) +
+            ' | Metal Coat: ' + str(items_inventory.get(1103).count) +
+            ' | Dragon Scale: ' + str(items_inventory.get(1104).count) +
+            ' | Upgrade: ' + str(items_inventory.get(1105).count))
+
+        if warn:
+            self.logger.info('')
+            self.event_manager.emit(
+                'niantic_warning',
+                sender=self,
+                level='warning',
+                formatted="This account has recieved a warning from Niantic. Bot at own risk."
+            )
+            sleep(5) # Pause to allow user to see warning
 
         self.logger.info('')
 
@@ -1345,37 +1562,45 @@ class PokemonGoBot(object):
             request = self.api.create_request()
             request.get_player()
             request.check_awarded_badges()
-            responses = request.call()
-
-            if responses['responses']['GET_PLAYER']['success'] == True:
-                # we get the player_data anyway, might as well store it
-                self._player = responses['responses']['GET_PLAYER']['player_data']
-                self.event_manager.emit(
-                    'player_data',
-                    sender=self,
-                    level='debug',
-                    formatted='player_data: {player_data}',
-                    data={'player_data': self._player}
-                )
-            if responses['responses']['CHECK_AWARDED_BADGES']['success'] == True:
-                # store awarded_badges reponse to be used in a task or part of heartbeat
-                self._awarded_badges = responses['responses']['CHECK_AWARDED_BADGES']
-
-            if 'awarded_badges' in self._awarded_badges:
-                i = 0
-                for badge in self._awarded_badges['awarded_badges']:
-                    badgelevel = self._awarded_badges['awarded_badge_levels'][i]
-                    badgename = BadgeType_pb2._BADGETYPE.values_by_number[badge].name
-                    i += 1
+            try:
+                responses = request.call()
+            except NotLoggedInException:
+                self.logger.warning('Unable to login, retying')
+                self.empty_response = True
+            except:
+                self.logger.warning('Error occured in heatbeat, retying')
+                self.empty_response = True
+            
+            if not self.empty_response:
+                if responses['responses']['GET_PLAYER']['success'] == True:
+                    # we get the player_data anyway, might as well store it
+                    self._player = responses['responses']['GET_PLAYER']['player_data']
                     self.event_manager.emit(
-                        'badges',
+                        'player_data',
                         sender=self,
-                        level='info',
-                        formatted='awarded badge: {badge}, lvl {level}',
-                        data={'badge': badgename,
-                              'level': badgelevel}
+                        level='debug',
+                        formatted='player_data: {player_data}',
+                        data={'player_data': self._player}
                     )
-                    human_behaviour.action_delay(3, 10)
+                if responses['responses']['CHECK_AWARDED_BADGES']['success'] == True:
+                    # store awarded_badges reponse to be used in a task or part of heartbeat
+                    self._awarded_badges = responses['responses']['CHECK_AWARDED_BADGES']
+
+                if 'awarded_badges' in self._awarded_badges:
+                    i = 0
+                    for badge in self._awarded_badges['awarded_badges']:
+                        badgelevel = self._awarded_badges['awarded_badge_levels'][i]
+                        badgename = badge_type_pb2._BADGETYPE.values_by_number[badge].name
+                        i += 1
+                        self.event_manager.emit(
+                            'badges',
+                            sender=self,
+                            level='info',
+                            formatted='awarded badge: {badge}, lvl {level}',
+                            data={'badge': badgename,
+                                  'level': badgelevel}
+                        )
+                        human_behaviour.action_delay(3, 10)
 
         try:
             self.web_update_queue.put_nowait(True)  # do this outside of thread every tick
@@ -1387,7 +1612,9 @@ class PokemonGoBot(object):
     def update_web_location_worker(self):
         while True:
             self.web_update_queue.get()
-            self.update_web_location()
+            #skip undate if no response
+            if not self.empty_response:
+                self.update_web_location()
 
     def display_player_info(self):
             player_stats = player()
@@ -1489,4 +1716,3 @@ class PokemonGoBot(object):
             inventory.refresh_inventory()
             self.last_inventory_refresh = now
             self.inventory_refresh_counter += 1
-

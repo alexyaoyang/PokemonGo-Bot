@@ -255,7 +255,7 @@ class MoveToMapPokemon(BaseTask):
         # If target exists, catch it, otherwise ignore
         if exists:
             self._encountered(pokemon)
-            catch_worker = PokemonCatchWorker(pokemon, self.bot, self.config)
+            catch_worker = PokemonCatchWorker(pokemon, self.bot)
             api_encounter_response = catch_worker.create_encounter_api_call()
             time.sleep(self.config.get('snipe_sleep_sec', 2))
             self._teleport_back(last_position)
@@ -290,7 +290,7 @@ class MoveToMapPokemon(BaseTask):
                 self._emit_log("Not enough balls to start sniping (have {}, {} needed)".format(
                     pokeballs_quantity + superballs_quantity + ultraballs_quantity, self.min_ball))
             return WorkerResult.SUCCESS
-            
+
         if self.bot.catch_disabled:
             if not hasattr(self.bot,"mtmp_disabled_global_warning") or \
                         (hasattr(self.bot,"mtmp_disabled_global_warning") and not self.bot.mtmp_disabled_global_warning):
@@ -299,6 +299,15 @@ class MoveToMapPokemon(BaseTask):
             return WorkerResult.SUCCESS
         else:
             self.bot.mtmp_disabled_global_warning = False
+
+        if self.bot.softban:
+            if not hasattr(self.bot, "softban_global_warning") or \
+                        (hasattr(self.bot, "softban_global_warning") and not self.bot.softban_global_warning):
+                self.logger.info("Possible softban! Not trying to catch Pokemon.")
+            self.bot.softban_global_warning = True
+            return WorkerResult.SUCCESS
+        else:
+            self.bot.softban_global_warning = False
 
         # Retrieve pokemos
         self.dump_caught_pokemon()

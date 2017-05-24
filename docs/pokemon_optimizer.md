@@ -4,6 +4,8 @@
     - [Default configuration](#default-configuration)
     - [Understand parameters](#understand-parameters)
         - [enabled](#enabled)
+        - [bulktransfer_enabled](#bulktransfer_enabled)
+        - [max_bulktransfer](#max_bulktransfer)
         - [min_slots_left](#min_slots_left)
         - [action_wait_min](#action_wait_min)
         - [action_wait_max](#action_wait_max)
@@ -15,6 +17,9 @@
         - [evolve_only_with_lucky_egg](#evolve_only_with_lucky_egg)
         - [evolve_count_for_lucky_egg](#evolve_count_for_lucky_egg)
         - [may_use_lucky_egg](#may_use_lucky_egg)
+        - [may_evolve_favorites](#may_evolve_favorites)
+        - [may_upgrade_favorites](#may_upgrade_favorites)
+        - [may_unfavor_pokemon](#may_unfavor_pokemon)
         - [upgrade](#upgrade)
         - [upgrade_level](#upgrade_level)
         - [groups](#groups)
@@ -27,6 +32,7 @@
             - [evolve](#rule-evolve)
             - [upgrade](#rule-upgrade)
             - [buddy](#rule-buddy)
+            - [favorite](#rule-favorite)
 - [Eevee case](#eevee-case)
 - [FAQ](#faq)
 
@@ -40,19 +46,24 @@ There is only one pass at each action.
 
 It will also collect the candies from your Buddy and select the next buddy.
 
+In case that logging will be enabled, look for .log file in data folder.
+
 [[back to top](#pokemon-optimizer)]
 
 # Configuration
 ## Default configuration
-```
+```json
 {
     "tasks": [
         {
             "type": "PokemonOptimizer",
             "config": {
                 "enabled": true,
+                "bulktransfer_enabled": False,
+                "max_bulktransfer": 10,
                 "min_slots_left": 5,
                 "action_wait_min": 3,
+                "debug": false,
                 "action_wait_max": 5,
                 "transfer": true,
                 "evolve": true,
@@ -62,6 +73,9 @@ It will also collect the candies from your Buddy and select the next buddy.
                 "evolve_only_with_lucky_egg": false,
                 "evolve_count_for_lucky_egg": 80,
                 "may_use_lucky_egg": true,
+                "may_evolve_favorites": true,
+                "may_upgrade_favorites": true,
+                "may_unfavor_pokemon": false,
                 "upgrade": true,
                 "upgrade_level": 30,
                 "groups": {
@@ -119,7 +133,7 @@ It will also collect the candies from your Buddy and select the next buddy.
                         "mode": "by_pokemon",
                         "names": ["!with_next_evolution"],
                         "top": 1,
-                        "sort": ["dps_attack"],
+                        "sort": ["dps_attack", "iv"],
                         "keep": {"iv": 0.9}
                     }
                 ]
@@ -138,6 +152,24 @@ It will also collect the candies from your Buddy and select the next buddy.
 | `enabled` | `true`, `false` | `true`  |
 
 Enable or disable the task.
+
+[[back to top](#pokemon-optimizer)]
+
+### bulktransfer_enabled
+| Parameter              | Posible values  | Default |
+|------------------------|-----------------|---------|
+| `bulktransfer_enabled` | `true`, `false` | `false` |
+
+Enable bulktransfer pokemon for faster transfer.
+
+[[back to top](#pokemon-optimizer)]
+
+### max_bulktransfer
+| Parameter          | Posible values  | Default |
+|--------------------|-----------------|---------|
+| `max_bulktransfer` | `[0-100]`       | `10`    |
+
+Maximum bulktransfer pokemon at a time.
 
 [[back to top](#pokemon-optimizer)]
 
@@ -308,6 +340,39 @@ Define whether you allow the Pokemon Optimizer to use a lucky egg before evolvin
 
 [[back to top](#pokemon-optimizer)]
 
+### may_evolve_favorites
+| Parameter           | Possible values | Default |
+|---------------------|-----------------|---------|
+| `may_evolve_favorites` | `true`, `false` | `true`  |
+
+Define whether you allow the Pokemon Optimizer to evolve favorite Pokemon or not.
+<br>At `true`, the Pokemon Optimizer will evolve favorite Pokemon according to the rules.
+<br>At `false`, the Pokemon Optimizer will not evolve favorite Pokemon.
+
+[[back to top](#pokemon-optimizer)]
+
+### may_upgrade_favorites
+| Parameter           | Possible values | Default |
+|---------------------|-----------------|---------|
+| `may_upgrade_favorites` | `true`, `false` | `true`  |
+
+Define whether you allow the Pokemon Optimizer to upgrade favorite Pokemon or not.
+<br>At `true`, the Pokemon Optimizer will upgrade favorite Pokemon according to the rules.
+<br>At `false`, the Pokemon Optimizer will not upgrade favorite Pokemon.
+
+[[back to top](#pokemon-optimizer)]
+
+### may_unfavor_pokemon
+| Parameter           | Possible values | Default |
+|---------------------|-----------------|---------|
+| `may_unfavor_pokemon` | `true`, `false` | `false`  |
+
+Define whether you allow the Pokemon Optimizer to unmark favorite Pokemon as favorite or not.
+<br>At `true`, the Pokemon Optimizer will unmark favorite Pokemon if it no longer matches favorite rules.
+<br>At `false`, the Pokemon Optimizer will not unmark favorite Pokemon.
+
+[[back to top](#pokemon-optimizer)]
+
 ### upgrade
 | Parameter | Possible values | Default |
 |-----------|-----------------|---------|
@@ -363,7 +428,7 @@ You can define `groups` of Pokemon to help you restrict rules to a specific set 
 <br>You can then use these `groups` names in the [`names`](#rule-names) parameter of your rule to refer to list of Pokemon
 
 `groups` are list of Pokemon names:
-```
+```json
 "groups": {
     "gym": ["Dragonite", "Snorlax"],
     "my_love": ["Pikachu"],
@@ -398,35 +463,77 @@ The order in which the rule are defined may have an impact on the behavior.
 Especially, if there not enough candies/stardust to evolve/upgrade all the selected Pokemon, the Pokemon selected by the first rule will be evolved/upgraded first, then the ones of the second rule etc.
 More generally, the first rule always have higher priority for evolve, upgrade or buddy.
 
-```
+```json
 "rules": [
     {
+        "// Of all Pokemon with less than 124 candies, buddy the Pokemon having the highest maximum cp": {},
+        "mode": "overall",
+        "top": 1,
+        "sort": ["max_cp", "cp"],
+        "keep": {"candy": -124},
+        "evolve": false,
+        "buddy": true
+    },
+    {
+        "// Buddy the Pokemon having the less candies. In case no Pokemon match first rule": {},
+        "mode": "overall",
+        "top": 1,
+        "sort": ["-candy", "max_cp", "cp"],
+        "evolve": false,
+        "buddy": true
+    },
+    {
+        "mode": "by_pokemon",
+        "names": ["gym"],
+        "top": 3,
+        "sort": ["iv", "ncp"],
+        "evolve": {"iv": 0.9, "ncp": 0.9},
+        "upgrade": {"iv": 0.9, "ncp": 0.9}
+    },
+    {
+        "// Keep best iv of each family and evolve it if its iv is greater than 0.9": {},
         "mode": "by_family",
         "top": 1,
         "sort": ["iv"],
         "evolve": {"iv": 0.9}
     },
     {
+        "// Keep best ncp of each family and evolve it if its ncp is greater than 0.9": {},
         "mode": "by_family",
         "top": 1,
         "sort": ["ncp"],
         "evolve": {"ncp": 0.9}
     },
     {
+        "// Keep best cp of each family but do not evolve it": {},
         "mode": "by_family",
         "top": 1,
-        "sort": ["cp"]
+        "sort": ["cp"],
+        "evolve": false
     },
     {
-        "mode": "by_family",
-        "top": 3,
-        "names": ["gym"],
-        "sort": ["iv", "ncp"],
-        "evolve": {"iv": 0.9, "ncp": 0.9},
-        "upgrade": {"iv": 0.9, "ncp": 0.9}
+        "// For Pokemon of final evolution and with iv greater than 0.9, keep the best dps_attack": {},
+        "mode": "by_pokemon",
+        "names": ["!with_next_evolution"],
+        "top": 1,
+        "sort": ["dps_attack", "iv"],
+        "keep": {"iv": 0.9}
     }
 ]
 ```
+
+The following table describe how the parameters of a rule affect the selection of Pokemon:
+
+|         |               | Balbusaur `{"iv": 0.38}` | Ivysaur `{"iv": 0.98}` | Venusaur `{"iv": 0.71}` | ... | Dratini `{"iv": 0.47}` | Dratini `{"iv": 0.93}` | Dragonair `{"iv": 0.82}` | Dragonair `{"iv": 0.91}` | Dragonite `{"iv": 1.0}` |
+|:-------:|:-------------:|:------------------------:|:----------------------:|:-----------------------:|:---:|:----------------------:|:----------------------:|:------------------------:|:------------------------:|:-----------------------:|
+|   mode  |  `per_family` |             A            |            A           |            A            |     |            B           |            B           |             B            |             B            |            B            |
+|  names  |  `Dragonite`  |                          |                        |                         |     |            x           |            x           |             x            |             x            |            x            |
+|   keep  | `{"iv": 0.8}` |                          |                        |                         |     |                        |            x           |             x            |             x            |            x            |
+|   sort  |    `["iv"]`   |                          |                        |                         |     |                        |            2           |             4            |             3            |            1            |
+|   top   |      `3`      |                          |                        |                         |     |                        |            x           |                          |             x            |            x            |
+|  evolve | `{"iv": 0.9}` |                          |                        |                         |     |                        |            x           |                          |             x            |                         |
+| upgrade | `{"iv": 1.0}` |                          |                        |                         |     |                        |                        |                          |                          |            x            |
+
 
 [[back to top](#pokemon-optimizer)]
 
@@ -570,6 +677,8 @@ By default, if `evolve` is not provided or is empty, no Pokemon will be evolved.
 The parameter can be a boolean value (`true` or `false`) or a list a criteria.
 The available criteria are the same as for the [`sort`](#available-criteria) parameter.
 
+*Note!* If [may_evolve_favorites](#may_evolve_favorites) is `false`, favorite Pokemon will never be evolved!
+
 The minimum requirement values can be a single value or a range.
 <br>They can also be a negative value if you wish to evolve Pokemon below a certain criteria:
 
@@ -596,8 +705,10 @@ By default, if `upgrade` is not provided or is empty, no Pokemon will be upgrade
 The parameter can be a boolean value (`true` or `false`) or a list a criteria.
 The available criteria are the same as for the [`sort`](#available-criteria) parameter.
 
+*Note!* If [may_upgrade_favorites](#may_upgrade_favorites) is `false`, favorite Pokemon will never be upgraded!
+
 The minimum requirement values can be a single value or a range.
-<br>They can also be a negative value if you wish to evolve Pokemon below a certain criteria:
+<br>They can also be a negative value if you wish to upgrade Pokemon below a certain criteria:
 
 - `"upgrade": false` will not try to upgrade any of the Pokemon selected.
 - `"upgrade": true` will try to upgrade all Pokemon selected.
@@ -607,6 +718,32 @@ The minimum requirement values can be a single value or a range.
 - `"upgrade": {"cp": -20}` will only upgrade Pokemon with `cp` lower than `20`.
 - `"upgrade": {"cp": [10, 20]}` will only upgrade Pokemon with `cp` between `10` and `20`.
 - `"upgrade": {"iv": [[0.3, 0.5], [0.9, 1.0]]}` will only upgrade Pokemon with `iv` between `0.3` and `0.5` or between `0.9` and `1.0`.
+
+[[back to top](#pokemon-optimizer)]
+
+#### rule favorite
+| Parameter | Possible values | Default |
+|-----------|-----------------|---------|
+| `favorite` | (see below)     | `false` |
+
+Define minimum requirements to favorite the Pokemon.
+Only Pokemon meeting these minimum requirements will be marked as favorite.
+By default, if `favorite` is not provided or is empty, no Pokemon will be marked favorite.
+
+The parameter can be a boolean value (`true` or `false`) or a list a criteria.
+The available criteria are the same as for the [`sort`](#available-criteria) parameter.
+
+The minimum requirement values can be a single value or a range.
+<br>They can also be a negative value if you wish to mark Pokemon below a certain criteria as favorite:
+
+- `"favorite": false` will not try to mark any of the Pokemon selected as favorite.
+- `"favorite": true` will try to mark all Pokemon selected as favorite.
+- `"favorite": {"iv": 0.9}` will only favorite Pokemon with `iv` greater than `0.9`.
+- `"favorite": {"iv": 0.9, "cp": 1200}` will only favorite Pokemon with `iv` greater than `0.9` and `cp` greater than `1200`.
+- `"favorite": {"iv": 0.9}` will only favorite Pokemon with `iv` greater than `0.9`.
+- `"favorite": {"cp": -20}` will only favorite Pokemon with `cp` lower than `20`.
+- `"favorite": {"cp": [10, 20]}` will only favorite Pokemon with `cp` between `10` and `20`.
+- `"favorite": {"iv": [[0.3, 0.5], [0.9, 1.0]]}` will only favorite Pokemon with `iv` between `0.3` and `0.5` or between `0.9` and `1.0`.
 
 [[back to top](#pokemon-optimizer)]
 
@@ -653,7 +790,7 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 # FAQ
 #### How do I keep the 2 best `iv` of every single Pokemon, and evolve them if they are over `0.9` `iv` ?
 
-```
+```json
 {
     "mode": "by_pokemon",
     "top": 2,
@@ -664,7 +801,7 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 
 #### How do I keep the 2 best `iv` of every single Pokemon, and evolve them if they are over `0.9` `ncp` ?
 
-```
+```json
 {
     "mode": "by_pokemon",
     "top": 2,
@@ -675,10 +812,10 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 
 #### How do I keep my 10 best `cp` Dragonite and Snorlax to fight gyms ?
 
-```
+```json
 {
     "mode": "by_pokemon",
-    "names": ["Dragonite", "Snorlax"]
+    "names": ["Dragonite", "Snorlax"],
     "top": 10,
     "sort": ["cp"]
 },
@@ -686,10 +823,10 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 
 #### How do I keep the Gyarados with the best moveset for attack ?
 
-```
+```json
 {
     "mode": "by_pokemon",
-    "names": ["Gyarados"]
+    "names": ["Gyarados"],
     "top": 1,
     "sort": ["dps_attack"]
 },
@@ -697,10 +834,10 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 
 #### How do I keep the Gyarados with the best fast attack ?
 
-```
+```json
 {
     "mode": "by_pokemon",
-    "names": ["Gyarados"]
+    "names": ["Gyarados"],
     "top": 1,
     "sort": ["dps1"]
 },
@@ -708,17 +845,17 @@ For Eevee Pokemon family, and any other family with multiple paths of evolution,
 
 #### How do I keep all my Poliwag with `cp` less that `20` ?
 
-```
+```json
 {
     "mode": "by_pokemon",
-    "names": ["Poliwag"]
+    "names": ["Poliwag"],
     "keep": {"cp": -20}
 },
 ```
 
 #### How do I buddy the Pokemon for which I have the less number of candies ?
 
-```
+```json
 {
     "mode": "overall",
     "top": 1,

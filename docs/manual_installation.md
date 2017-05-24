@@ -1,4 +1,5 @@
 # Manual installation
+Consider purchase of [hashing key](http://hashing.pogodev.org) - if you want use latest API, not the old, 0.45
 
 ## Table of Contents
 - [Linux and Mac Installation](#linux-and-mac)
@@ -7,11 +8,17 @@
 ### Linux and Mac
 Ubuntu will be used for the Linux Example
 
-####First install required packages
+#### First install required packages
 
-#####Linux
+##### Linux - Ubuntu
 ```bash
 sudo apt-get install build-essential autoconf libtool pkg-config make python2.7-dev wget git
+```
+##### Linux - Centos 7
+```bash
+sudo yum install -y epel-release
+sudo yum install -y git wget python python-pip
+sudo yum groupinstall -y "Development Tools"
 ```
 ####
 if you are on a different Linux OS you maybe have to adapt things like:
@@ -19,12 +26,11 @@ if you are on a different Linux OS you maybe have to adapt things like:
 - package manager (for example yum instead of apt-get)
 - package names
 
-#####Mac
+##### Mac
 ```bash
-brew install --devel protobuf
 brew install  autoconf libtool pkg-config wget git
 ```
-####Mac + Linux installation
+#### Mac + Linux installation
 make sure you installed everything above
 
 - get pip for python2.7
@@ -50,17 +56,13 @@ virtualenv .
 source bin/activate
 ```
 ####
-- install the requirements and get the needed encryption.so
+- install the requirements
 
-(we move `encrypt.so` to the root folder of the Bot so no need to edit the config regarding that)
+
 ```bash
 pip install -r requirements.txt
-wget http://pgoapi.com/pgoencrypt.tar.gz
-tar -xzvf pgoencrypt.tar.gz
-cd pgoencrypt/src/
 make
 cd ../../
-mv pgoencrypt/src/libencrypt.so encrypt.so
 ```
 ####
 - copy and edit the config
@@ -108,7 +110,6 @@ source bin/activate
 cd C:\Python27\
 pip2 install --upgrade pip
 pip2 install --upgrade virtualenv
-pip2 install --upgrade protobuf==3.0.0b4
 git clone --recursive -b dev https://github.com/PokemonGoF/PokemonGo-Bot
 pip2 install --upgrade -r C:/Python27/PokemonGo-Bot/requirements.txt
 cd C:/Python27/PokemonGo-Bot/
@@ -117,11 +118,6 @@ call C:\Python27\PokemonGo-Bot\Scripts\activate.bat
 pip2 install --upgrade -r C:/Python27/PokemonGo-Bot/requirements.txt
 ```
 
-##### Get encrypt.so and encrypt.dll or encrypt_64.dll
-Due to copyright on the encrypt.so, encrypt.dll and encrypt_64.dll we are not directly hosting it. Please find a copy elsewhere on the internet and compile it yourself. We accept no responsibility should you encounter any problems with files you download elsewhere.
-Try asking around our Slack chat **(Just say the word "encrypt" and Slackbot will give you info)**!
-
-Download it to the `C:/Python27/PokemonGo-Bot/` folder
 
 ##### Update
 
@@ -130,5 +126,6 @@ Download it to the `C:/Python27/PokemonGo-Bot/` folder
 ```
 cd C:/Python27/PokemonGo-Bot/
 git pull
+pip uninstall pgoapi
 git submodule update --init --recursive
 ```

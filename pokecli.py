@@ -40,6 +40,7 @@ import string
 import subprocess
 
 from logging import Formatter
+from random import randint
 
 codecs.register(lambda name: codecs.lookup("utf-8") if name == "cp65001" else None)
 
@@ -65,7 +66,7 @@ if sys.version_info >= (2, 7, 9):
 try:
     import pkg_resources
     pgoapi_version = pkg_resources.get_distribution("pgoapi").version
-    if pgoapi_version != '1.1.6':
+    if pgoapi_version != '1.2.0':
         print "Run following command to get latest update: `pip install -r requirements.txt --upgrade`"
         sys.exit(1)
 except pkg_resources.DistributionNotFound:
@@ -75,6 +76,7 @@ except pkg_resources.DistributionNotFound:
 except ImportError as e:
     print e
     pass
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -185,7 +187,9 @@ def main():
         finished = False
 
         while not finished:
-            wait_time = config.reconnecting_timeout * 60
+            min_wait_time = int(config.reconnecting_timeout * 0.8 * 60)
+            max_wait_time = int(config.reconnecting_timeout *  1.2 * 60)
+            wait_time = randint(min_wait_time, max_wait_time)
             try:
                 bot = initialize(config)
                 bot = start_bot(bot, config)
@@ -233,7 +237,7 @@ def main():
                     'api_error',
                     sender=bot,
                     level='info',
-                    formatted='Server busy or offline'
+                    formatted='Server busy or offline, reconnecting in {:d} seconds'.format(wait_time)
                 )
                 time.sleep(wait_time)
             except ServerSideRequestThrottlingException:
@@ -241,9 +245,9 @@ def main():
                     'api_error',
                     sender=bot,
                     level='info',
-                    formatted='Server is throttling, reconnecting in 30 seconds'
+                    formatted='Server is throttling, reconnecting in {:d} seconds'.format(wait_time)
                 )
-                time.sleep(30)
+                time.sleep(wait_time)
             except PermaBannedException:
                 bot.event_manager.emit(
                     'api_error',
@@ -257,7 +261,7 @@ def main():
                     'api_error',
                     sender=bot,
                     level='info',
-                    formatted='No player position set'
+                    formatted='No player position set, reconnecting in {:d} seconds'.format(wait_time)
                 )
                 time.sleep(wait_time)
 
@@ -324,7 +328,17 @@ def report_summary(bot):
         return  # Bot didn't actually start, no metrics to show.
 
     metrics = bot.metrics
-    metrics.capture_stats()
+    try:
+        metrics.capture_stats()
+    except NotLoggedInException:
+        bot.event_manager.emit(
+            'api_error',
+            sender=bot,
+            level='info',
+            formatted='Not logged in, reconnecting in {:d} seconds'.format(5)
+        )
+        time.sleep(5)
+        return
     logger.info('')
     logger.info('Ran for {}'.format(metrics.runtime()))
     logger.info('Total XP Earned: {}  Average: {:.2f}/h'.format(metrics.xp_earned(), metrics.xp_per_hour()))
@@ -401,6 +415,15 @@ def init_config():
         long_flag="--username",
         help="Username",
         default=None
+    )
+    add_config(
+        parser,
+        load,
+        short_flag="-capi",
+        long_flag="--check_niantic_api",
+        help="Enable killswitch on API Change",
+        type=bool,
+        default=True
     )
     add_config(
         parser,
@@ -484,6 +507,15 @@ def init_config():
         short_flag="-k",
         long_flag="--gmapkey",
         help="Set Google Maps API KEY",
+        type=str,
+        default=None
+    )
+    add_config(
+        parser,
+        load,
+        short_flag="-hk",
+        long_flag="--hashkey",
+        help="Set Bossland hashing key",
         type=str,
         default=None
     )

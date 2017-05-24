@@ -5,6 +5,7 @@ import os
 import time
 import json
 import sys
+from collections import OrderedDict
 
 from random import random, randrange, uniform
 from pokemongo_bot import inventory
@@ -31,6 +32,7 @@ ITEM_POKEBALL = 1
 ITEM_GREATBALL = 2
 ITEM_ULTRABALL = 3
 ITEM_RAZZBERRY = 701
+ITEM_PINAPBERRY = 705
 
 DEFAULT_UNSEEN_AS_VIP = True
 
@@ -45,8 +47,17 @@ DEBUG_ON = False
 
 class PokemonCatchWorker(BaseTask):
 
-    def __init__(self, pokemon, bot, config):
+    def __init__(self, pokemon, bot, config={}):
         self.pokemon = pokemon
+
+        # Load CatchPokemon config if no config supplied
+        if not config:
+            for value in bot.workers:
+                if hasattr(value, 'catch_pokemon'):
+                    config = value.config
+
+        self.config = config
+
         super(PokemonCatchWorker, self).__init__(bot, config)
         if self.config.get('debug', False): DEBUG_ON = True
 
@@ -62,14 +73,16 @@ class PokemonCatchWorker(BaseTask):
         self.rest_completed = False
         self.caught_last_24 = 0
 
-
-
         #Config
         self.min_ultraball_to_keep = self.config.get('min_ultraball_to_keep', 10)
         self.berry_threshold = self.config.get('berry_threshold', 0.35)
         self.vip_berry_threshold = self.config.get('vip_berry_threshold', 0.9)
         self.treat_unseen_as_vip = self.config.get('treat_unseen_as_vip', DEFAULT_UNSEEN_AS_VIP)
         self.daily_catch_limit = self.config.get('daily_catch_limit', 800)
+        self.use_pinap_on_vip = self.config.get('use_pinap_on_vip', False)
+        self.pinap_on_level_below = self.config.get('pinap_on_level_below', 0)
+        self.pinap_operator = self.config.get('pinap_operator', "or")
+        self.pinap_ignore_threshold = self.config.get('pinap_ignore_threshold', False)
 
         self.vanish_settings = self.config.get('vanish_settings', {})
         self.consecutive_vanish_limit = self.vanish_settings.get('consecutive_vanish_limit', 10)
@@ -130,7 +143,7 @@ class PokemonCatchWorker(BaseTask):
         is_vip = self._is_vip_pokemon(pokemon)
 
         # skip ignored pokemon
-        if (not self._should_catch_pokemon(pokemon) and not is_vip) or self.bot.catch_disabled:            
+        if (not self._should_catch_pokemon(pokemon) and not is_vip) or self.bot.catch_disabled:
             if not hasattr(self.bot,'skipped_pokemon'):
                 self.bot.skipped_pokemon = []
 
@@ -143,16 +156,19 @@ class PokemonCatchWorker(BaseTask):
 
             if self.bot.catch_disabled:
                 self.logger.info("Not catching {}. All catching tasks are currently disabled until {}.".format(pokemon,self.bot.catch_resume_at.strftime("%H:%M:%S")))
-
+            # Add the encounter_id to the Pokemon
+            pokemon.encounter_id = self.pokemon['encounter_id']
             self.bot.skipped_pokemon.append(pokemon)
+
             self.emit_event(
                 'pokemon_appeared',
-                formatted='Skip ignored {pokemon}! (CP: {cp} IV: {iv} A/D/S {iv_display})',
+                formatted='Skip ignored {pokemon}! (CP: {cp} IV: {iv} A/D/S: {iv_display} Shiny: {shiny})',
                 data={
                     'pokemon': pokemon.name,
                     'cp': str(int(pokemon.cp)),
                     'iv': str(pokemon.iv),
                     'iv_display': str(pokemon.iv_display),
+                    'shiny': pokemon.shiny,
                 }
             )
             return WorkerResult.SUCCESS
@@ -167,7 +183,7 @@ class PokemonCatchWorker(BaseTask):
         # log encounter
         self.emit_event(
             'pokemon_appeared',
-            formatted='A wild {} appeared! (CP: {} IV: {} A/D/S {} NCP: {}'.format(pokemon.name, pokemon.cp,  pokemon.iv, pokemon.iv_display, round(pokemon.cp_percent, 2),),
+            formatted='A wild {} appeared! (CP: {} IV: {} A/D/S: {} NCP: {} Shiny: {})'.format(pokemon.name, pokemon.cp,  pokemon.iv, pokemon.iv_display, round(pokemon.cp_percent, 2),pokemon.shiny, ),
             data={
                 'pokemon': pokemon.name,
                 'ncp': round(pokemon.cp_percent, 2),
@@ -177,7 +193,8 @@ class PokemonCatchWorker(BaseTask):
                 'encounter_id': self.pokemon['encounter_id'],
                 'latitude': self.pokemon['latitude'],
                 'longitude': self.pokemon['longitude'],
-                'pokemon_id': pokemon.pokemon_id
+                'pokemon_id': pokemon.pokemon_id,
+                'shiny': pokemon.shiny,
             }
         )
 
@@ -358,6 +375,9 @@ class PokemonCatchWorker(BaseTask):
         # Not seen pokemons also will become vip if it's not disabled in config
         if self.bot.config.vips.get(pokemon.name) == {} or (self.treat_unseen_as_vip and not self.pokedex.seen(pokemon.pokemon_id)):
             return True
+        # Treat all shiny pokemon as VIP!
+        if pokemon.shiny:
+            return True
         return self._pokemon_matches_config(self.bot.config.vips, pokemon, default_logic='or')
 
     def _pct(self, rate_by_ball):
@@ -379,19 +399,19 @@ class PokemonCatchWorker(BaseTask):
             }
         )
 
-        response_dict = self.bot.api.use_item_capture(
-            item_id=berry_id,
+        response_dict = self.bot.api.use_item_encounter(
+            item=berry_id,
             encounter_id=encounter_id,
-            spawn_point_id=self.spawn_point_guid
+            spawn_point_guid=self.spawn_point_guid
         )
         responses = response_dict['responses']
 
-        if response_dict and response_dict['status_code'] == 1:
+        if response_dict['status_code'] == 1:
 
             # update catch rates using multiplier
-            if 'item_capture_mult' in responses['USE_ITEM_CAPTURE']:
+            if 'capture_probability' in responses['USE_ITEM_ENCOUNTER']:
                 for rate in catch_rate_by_ball:
-                    new_catch_rate_by_ball.append(rate * responses['USE_ITEM_CAPTURE']['item_capture_mult'])
+                    new_catch_rate_by_ball.append(float(responses['USE_ITEM_ENCOUNTER']['capture_probability']['capture_probability'][current_ball-1]))
                 self.emit_event(
                     'threw_berry',
                     formatted="Threw a {berry_name}! Catch rate with {ball_name} is now: {new_catch_rate}",
@@ -429,7 +449,6 @@ class PokemonCatchWorker(BaseTask):
                         level='info',
                         formatted="softban_log table not found, skipping log"
                     )
-
         # unknown status code
         else:
             new_catch_rate_by_ball = catch_rate_by_ball
@@ -449,7 +468,18 @@ class PokemonCatchWorker(BaseTask):
 
         :type pokemon: Pokemon
         """
-        berry_count = self.inventory.get(ITEM_RAZZBERRY).count
+
+        if self.use_pinap_on_vip and is_vip and pokemon.level <= self.pinap_on_level_below and self.pinap_operator == "and":
+            berry_id = ITEM_PINAPBERRY
+        else:
+            berry_id = ITEM_RAZZBERRY
+        
+        if self.pinap_operator == "or":
+            if (self.use_pinap_on_vip and is_vip) or (pokemon.level <= self.pinap_on_level_below):
+                berry_id = ITEM_PINAPBERRY
+
+        berry_count = self.inventory.get(berry_id).count
+
         ball_count = {}
         for ball_id in [ITEM_POKEBALL, ITEM_GREATBALL, ITEM_ULTRABALL]:
             ball_count[ball_id] = self.inventory.get(ball_id).count
@@ -459,12 +489,16 @@ class PokemonCatchWorker(BaseTask):
         if self.min_ultraball_to_keep is not None and self.min_ultraball_to_keep >= 0:
             min_ultraball_to_keep = self.min_ultraball_to_keep
 
-        berry_id = ITEM_RAZZBERRY
         maximum_ball = ITEM_GREATBALL if ball_count[ITEM_ULTRABALL] < min_ultraball_to_keep else ITEM_ULTRABALL
         ideal_catch_rate_before_throw = self.vip_berry_threshold if is_vip else self.berry_threshold
+        ideal_catch_rate_before_throw = 1 if self.pinap_ignore_threshold and berry_id == ITEM_PINAPBERRY else ideal_catch_rate_before_throw
 
         used_berry = False
         original_catch_rate_by_ball = catch_rate_by_ball
+        
+        if DEBUG_ON:
+            print "Pokemon Level: " + str(pokemon.level) + " Berries count: " + str(berry_count) + " Berries ID: " + str(berry_id) + " Catch rate: " + str(ideal_catch_rate_before_throw)
+        
         while True:
 
             # find lowest available ball
@@ -482,16 +516,23 @@ class PokemonCatchWorker(BaseTask):
                 next_ball += 1
                 num_next_balls += ball_count[next_ball]
 
+            # If pinap berry is not enough, use razz berry
+            if berry_count == 0 and berry_id == ITEM_PINAPBERRY:
+                berry_id = ITEM_RAZZBERRY
+                ideal_catch_rate_before_throw = self.vip_berry_threshold if is_vip else self.berry_threshold
+                berry_count = self.inventory.get(berry_id).count
+
             # check if we've got berries to spare
             berries_to_spare = berry_count > 0 if is_vip else berry_count > num_next_balls + 30
 
-            # use a berry if we are under our ideal rate and have berries to spare
             changed_ball = False
+
+            # use a berry if we are under our ideal rate and have berries to spare
             if catch_rate_by_ball[current_ball] < ideal_catch_rate_before_throw and berries_to_spare and not used_berry:
                 new_catch_rate_by_ball = self._use_berry(berry_id, berry_count, encounter_id, catch_rate_by_ball, current_ball)
                 if new_catch_rate_by_ball != catch_rate_by_ball:
                     catch_rate_by_ball = new_catch_rate_by_ball
-                    self.inventory.get(ITEM_RAZZBERRY).remove(1)
+                    self.inventory.get(berry_id).remove(1)
                     berry_count -= 1
                     used_berry = True
 
@@ -509,7 +550,7 @@ class PokemonCatchWorker(BaseTask):
                 new_catch_rate_by_ball = self._use_berry(berry_id, berry_count, encounter_id, catch_rate_by_ball, current_ball)
                 if new_catch_rate_by_ball != catch_rate_by_ball:
                     catch_rate_by_ball = new_catch_rate_by_ball
-                    self.inventory.get(ITEM_RAZZBERRY).remove(1)
+                    self.inventory.get(berry_id).remove(1)
                     berry_count -= 1
                     used_berry = True
 
@@ -642,25 +683,49 @@ class PokemonCatchWorker(BaseTask):
 
                 result = c.fetchone()
 
-                self.emit_event(
-                    'pokemon_caught',
-                    formatted='Captured {pokemon}! (CP: {cp} IV: {iv} {iv_display} NCP: {ncp}) Catch Limit: ({caught_last_24_hour}/{daily_catch_limit}) +{exp} exp +{stardust} stardust',
-                    data={
-                        'pokemon': pokemon.name,
-                        'ncp': str(round(pokemon.cp_percent, 2)),
-                        'cp': str(int(pokemon.cp)),
-                        'iv': str(pokemon.iv),
-                        'iv_display': str(pokemon.iv_display),
-                        'exp': str(exp_gain),
-                        'stardust': stardust_gain,
-                        'encounter_id': str(self.pokemon['encounter_id']),
-                        'latitude': str(self.pokemon['latitude']),
-                        'longitude': str(self.pokemon['longitude']),
-                        'pokemon_id': str(pokemon.pokemon_id),
-                        'caught_last_24_hour': str(result[0]),
-                        'daily_catch_limit': str(self.daily_catch_limit)
-                    }
-                )
+                if is_vip:
+                    self.emit_event(
+                        'pokemon_vip_caught',
+                        formatted='Vip Captured {pokemon}! (CP: {cp} IV: {iv} {iv_display} NCP: {ncp} Shiny: {shiny}) Catch Limit: ({caught_last_24_hour}/{daily_catch_limit}) +{exp} exp +{stardust} stardust',
+                        data={
+                            'pokemon': pokemon.name,
+                            'ncp': str(round(pokemon.cp_percent, 2)),
+                            'cp': str(int(pokemon.cp)),
+                            'iv': str(pokemon.iv),
+                            'iv_display': str(pokemon.iv_display),
+                            'shiny': pokemon.shiny,
+                            'exp': str(exp_gain),
+                            'stardust': stardust_gain,
+                            'encounter_id': str(self.pokemon['encounter_id']),
+                            'latitude': str(self.pokemon['latitude']),
+                            'longitude': str(self.pokemon['longitude']),
+                            'pokemon_id': str(pokemon.pokemon_id),
+                            'caught_last_24_hour': str(result[0]),
+                            'daily_catch_limit': str(self.daily_catch_limit)
+                        }
+                    )
+
+                else:
+                    self.emit_event(
+                        'pokemon_caught',
+                        formatted='Captured {pokemon}! (CP: {cp} IV: {iv} {iv_display} NCP: {ncp} Shiny: {shiny}) Catch Limit: ({caught_last_24_hour}/{daily_catch_limit}) +{exp} exp +{stardust} stardust',
+                        data={
+                            'pokemon': pokemon.name,
+                            'ncp': str(round(pokemon.cp_percent, 2)),
+                            'cp': str(int(pokemon.cp)),
+                            'iv': str(pokemon.iv),
+                            'iv_display': str(pokemon.iv_display),
+                            'shiny': pokemon.shiny,
+                            'exp': str(exp_gain),
+                            'stardust': stardust_gain,
+                            'encounter_id': str(self.pokemon['encounter_id']),
+                            'latitude': str(self.pokemon['latitude']),
+                            'longitude': str(self.pokemon['longitude']),
+                            'pokemon_id': str(pokemon.pokemon_id),
+                            'caught_last_24_hour': str(result[0]),
+                            'daily_catch_limit': str(self.daily_catch_limit)
+                        }
+                    )
 
 
                 inventory.pokemons().add(pokemon)
@@ -671,10 +736,11 @@ class PokemonCatchWorker(BaseTask):
 
                 self.emit_event(
                     'gained_candy',
-                    formatted='You now have {quantity} {type} candy!',
+                    formatted='Candy gained: {gained_candy}. You now have {quantity} {type} candy!',
                     data = {
+                        'gained_candy': str(candy_gain),
                         'quantity': candy.quantity,
-                        'type': candy.type,
+                        'type': candy.type
                     },
                 )
 
@@ -701,14 +767,16 @@ class PokemonCatchWorker(BaseTask):
                         break
                     user_data_caught = os.path.join(_base_dir, 'data', 'caught-%s.json' % self.bot.config.username)
                     with open(user_data_caught, 'ab') as outfile:
-                        outfile.write(str(datetime.now()))
-                        json.dump({
+                        json.dump(OrderedDict({
+                            'datetime': str(datetime.now()),
                             'pokemon': pokemon.name,
                             'cp': pokemon.cp,
                             'iv': pokemon.iv,
                             'encounter_id': self.pokemon['encounter_id'],
-                            'pokemon_id': pokemon.pokemon_id
-                        }, outfile)
+                            'pokemon_id': pokemon.pokemon_id,
+                            'latitude': self.pokemon['latitude'],
+                            'longitude': self.pokemon['longitude']
+                        }), outfile)
                         outfile.write('\n')
 
                     # if it is a new pokemon to our dex, simulate app animation delay

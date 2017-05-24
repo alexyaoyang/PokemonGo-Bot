@@ -29,26 +29,31 @@
     - [`flee_count` and `flee_duration`](#flee_count-and-flee_duration)
     - [Previous `catch_simulation` Behaviour](#previous-catch_simulation-behaviour)
 - [CatchLimiter Settings](#catchlimiter-settings)
-- [Sniping _(MoveToLocation)_](#sniping-_-movetolocation-_)
+- [Sniping _(MoveToLocation)_](#sniping-movetolocation)
     - [Description](#description)
     - [Options](#options)
         - [Example](#example)
 - [Sniping _(Sniper)_](#sniper)
-    - [Description](#description)
-    - [Options](#options)
+    - [Description](#description-1)
+    - [Options](#options-1)
         - [Example](#example)
 - [FollowPath Settings](#followpath-settings)
-    - [Description](#description)
-    - [Options](#options)
-    - [Sample Configuration](#sample-configuration)
+    - [Description](#description-2)
+    - [Options](#options-2)
+    - [Sample Configuration](#sample-configuration-1)
 - [UpdateLiveStats Settings](#updatelivestats-settings)
-    - [Options](#options)
-    - [Sample Configuration](#sample-configuration)
+    - [Options](#options-3)
+    - [Sample Configuration](#sample-configuration-2)
 - [UpdateLiveInventory Settings](#updateliveinventory-settings)
-    - [Description](#description)
-    - [Options](#options)
-    - [Sample configuration](#sample-configuration)
+    - [Description](#description-3)
+    - [Options](#options-4)
+    - [Sample configuration](#sample-configuration-3)
     - [Example console output](#example-console-output)
+- [UpdateHashStats Settings](#updatehashstats-settings)
+    - [Description](#description-4)
+    - [Options](#options-5)
+    - [Sample configuration](#sample-configuration-4)
+    - [Example console output](#example-console-output-1)
 - [Random Pause](#random-pause)
 - [Egg Incubator](#egg-incubator)
 - [ShowBestPokemon](#showbestpokemon)
@@ -56,8 +61,9 @@
 - [Discord Task](#discord-task)
 - [CompleteTutorial](#completetutorial)
 - [BuddyPokemon](#buddypokemon)
+- [PokemonHunter](#pokemonhunter)
 
-#Configuration files
+# Configuration files
 
 Document the configuration options of PokemonGo-Bot.
 
@@ -84,7 +90,7 @@ Document the configuration options of PokemonGo-Bot.
 | `action_wait_min`   | 1       | Set the minimum time setting for anti-ban time randomizer
 | `action_wait_max`   | 4       | Set the maximum time setting for anti-ban time randomizer
 | `debug`            | false   | Let the default value here except if you are developer                                                                                                                                      |
-| `test`             | false   | Let the default value here except if you are developer                                                                                                                                      |  
+| `test`             | false   | Let the default value here except if you are developer                                                                                                                                      |
 | `walker_limit_output`             | false   | Reduce output from walker functions                                                                                                                                      |                                                                                       |
 | `location_cache`   | true    | Bot will start at last known location if you do not have location set in the config                                                                                                         |
 | `distance_unit`    | km      | Set the unit to display distance in (km for kilometers, mi for miles, ft for feet)                                                                                                          |
@@ -97,6 +103,7 @@ Document the configuration options of PokemonGo-Bot.
 | `live_config_update.enabled`            | false     | Enable live config update
 | `live_config_update.tasks_only`            | false     | True: quick update for Tasks only (without re-login). False: slower update for entire config file.
 | `enable_social`            | true     | True: to chat with other pokemon go bot users [more information](https://github.com/PokemonGoF/PokemonGo-Bot/pull/4596)
+| `reconnecting_timeout`   |  5      | Set the wait time for the bot between tries, time will be randomized by 40%
 
 ## Logging configuration
 [[back to top](#table-of-contents)]
@@ -114,7 +121,7 @@ Pauses the execution of the bot every day for some time
 
 Simulates the user going to sleep every day for some time, the sleep time and the duration is changed every day by a random offset defined in the config file.
 
-###Example Config
+### Example Config
 ```
 "sleep_schedule": {
   "enabled": true,
@@ -163,7 +170,7 @@ The behaviors of the bot are configured via the `tasks` key in the `config.json`
 ### Task Options:
 [[back to top](#table-of-contents)]
 * CatchPokemon
-  * `enabled`: Default "true" | Enable/Disable the task. 
+  * `enabled`: Default "true" | Enable/Disable the task.
   * `treat_unseen_as_vip`: Default `"true"` | If true, treat new to dex as VIP
   * `catch_visible_pokemon`:  Default "true" | If enabled, attempts to catch "visible" pokemon that are reachable
   * `catch_lured_pokemon`: Default "true" | If enabled, attempts to catch "lured" pokemon that are reachable
@@ -194,6 +201,7 @@ The behaviors of the bot are configured via the `tasks` key in the `config.json`
 * Catch Limiter
   * `enabled`: Default false | Enable/disable the task
   * `min_balls`: Default 20 | Minimum balls on hand before catch tasks enabled
+  * `resume_at_balls`: Default 100 | When this number of balls is reached, immediately resume catching
   * `duration`: Default 15 | Length of time to disable catch tasks
 * EvolvePokemon
   * `enable`: Disable or enable this task.
@@ -201,24 +209,29 @@ The behaviors of the bot are configured via the `tasks` key in the `config.json`
   * `log_interval`: `Default: 120`. Time (in seconds) to periodically print how far you are from having enough pokemon to evolve (more than `min_pokemon_to_be_evolved`)
   * `evolve_list`: Default `all` | Set to all, or specifiy different pokemon seperated by a comma
   * `donot_evolve_list`: Default `none` | Pokemon seperated by comma, will be ignored from evolve_list
-  * `min_evolve_speed`: Default `25` | Minimum seconds to wait between each evolution 
+  * `min_evolve_speed`: Default `25` | Minimum seconds to wait between each evolution
   * `max_evolve_speed`: Default `30` | Maximum seconds to wait between each evolution
   * `min_pokemon_to_be_evolved`: Default: `1` | Minimum pokemon to be evolved
   * `use_lucky_egg`: Default: `False` | Only evolve if we can use a lucky egg
 * FollowPath
   * `enable`: Disable or enable this task.
+  * `disable_while_hunting`: Default `true` | Disable walking when Pokemon Hunter has a target locked.
   * `path_mode`: Default `loop` | Set the mode for the path navigator (loop, linear or single).
   * `path_file`: Default `NONE` | Set the file containing the waypoints for the path navigator.
 * FollowSpiral
   * `enable`: Disable or enable this task.
   * `spin_wait_min`: Default 3 | Minimum wait time after fort spin
   * `spin_wait_max`: Default 5 | Maximum wait time after fort spin
+  * `daily_spin_limit`: Default 2000 | Daily spin limit
+  * `min_interval`: Default 120 | When daily spin limit is reached, how often should the warning message be shown
+  * `exit_on_limit_reached`: Default `True` | Code will exits if daily_spin_limit is reached
 * HandleSoftBan
 * IncubateEggs
   * `enable`: Disable or enable this task.
   * `longer_eggs_first`: Depreciated
-  * `infinite_longer_eggs_first`:  Default `true` | Prioritize longer eggs in perminent incubators. 
-  * `breakable_longer_eggs_first`:  Default `false` | Prioritize longer eggs in breakable incubators. 
+  * `infinite_longer_eggs_first`:  Default `false` | Prioritize longer eggs in perminent incubators.
+  * `infinite_random_eggs`:  Default `false` | Put a random egg in perminent incubators.
+  * `breakable_longer_eggs_first`:  Default `true` | Prioritize longer eggs in breakable incubators.
   * `min_interval`: Default `120` | Minimum number of seconds between incubation updates.
   * `infinite`: Default `[2,5,10]` | Types of eggs to be incubated in permanent incubators.
   * `breakable`: Default `[2,5,10]` | Types of eggs to be incubated in breakable incubators.
@@ -273,10 +286,10 @@ The behaviors of the bot are configured via the `tasks` key in the `config.json`
   * `level_limit`: Default `-1` | Bot will stop automatically after trainer reaches level limit. Set to `-1` to disable.
 * All tasks
   * `log_interval`: Default `0` | Minimum seconds interval before next log of the current task will be printed
-  
-  
+
+
 ### Specify a custom log_interval for specific task
-  
+
   ```
     {
       "type": "MoveToFort",
@@ -289,9 +302,9 @@ The behaviors of the bot are configured via the `tasks` key in the `config.json`
       }
     }
    ```
-      
+
    Result:
-    
+
     2016-08-26 11:43:18,199 [MoveToFort] [INFO] [moving_to_fort] Moving towards pokestop ... - 0.07km
     2016-08-26 11:43:23,641 [MoveToFort] [INFO] [moving_to_fort] Moving towards pokestop ... - 0.06km
     2016-08-26 11:43:28,198 [MoveToFort] [INFO] [moving_to_fort] Moving towards pokestop ... - 0.05km
@@ -425,7 +438,7 @@ Define a list of criteria to keep the best Pokemons according to those criteria.
 
 The list of criteria is the following:```'cp','iv', 'iv_attack', 'iv_defense', 'iv_stamina', 'moveset.attack_perfection', 'moveset.defense_perfection', 'hp', 'hp_max'```
 
-####Examples:
+#### Examples:
 
 - Keep the top 25 Zubat with the best hp_max:
 
@@ -597,6 +610,10 @@ The default settings are 'safe' settings intended to simulate human and app beha
 "catch_lured_pokemon": true,
 "min_ultraball_to_keep": 5,
 "berry_threshold": 0.35,
+"use_pinap_on_vip": false,
+"pinap_on_level_below": 0,
+"pinap_operator": "or",
+"pinap_ignore_threshold": false,
 "vip_berry_threshold": 0.9,
 "catch_throw_parameters": {
   "excellent_rate": 0.1,
@@ -625,6 +642,10 @@ Setting | Description
 ---- | ----
 `min_ultraball_to_keep` | Allows the bot to use ultraballs on non-VIP pokemon as long as number of ultraballs is above this setting
 `berry_threshold` | The ideal catch rate threshold before using a razz berry on normal pokemon (higher threshold means using razz berries more frequently, for example if we raise `berry_threshold` to 0.5, any pokemon that has an initial catch rate between 0 to 0.5 will initiate a berry throw)
+`use_pinap_on_vip` | Use pinap berry instead of razz berry on on VIP pokemon. The bot will use razz berry if pinap berry has run out
+`pinap_on_level_below` | Set at what level (and below) of the pokemon should Pinap berry br use on. Set to 0 to disable use of pinap berry
+`pinap_operator` | Set if Pinap berry going to be use together with "use_pinap_on_vip" or without (Operator "or", "and")
+`pinap_ignore_threshold` | Set if bot is going to ignore catch rate threshold when using pinap berry
 `vip_berry_threshold` | The ideal catch rate threshold before using a razz berry on VIP pokemon
 `flee_count` | The maximum number of times catching animation will play before the pokemon breaks free
 `flee_duration` | The length of time for each animation
@@ -770,10 +791,13 @@ This task is an upgrade version of the MoveToMapPokemon task. It will fetch poke
 * `mode` - The mode on which the sniper will fetch the informations. (default: social)
    - `social` - Information will come from the social network.
    - `url` - Information will come from one or multiple urls.
+   - `telegram` - Manual snipping through telegram.  In telegram, use "/snipe <PokemonName> <Lat> <Lng>" to snipe. Subscript to "/sub sniper_log" and "/sub pokemon_vip_caught" to retrieve snipping results through telegram.
 * `bullets` - Each bullet corresponds to an **ATTEMPT** of catching a pokemon. (default: 1)
 * `homing_shots` - This will ensure that each bullet **will catch** a target. If disabled, a target might not exist and thus it wont be caught. When enabled, this will jump to the next target (if any) and try again to catch it. This will be repeated untill you've spent all the bullets. (default: true)
 * `special_iv` - This will skip the catch list if the value is greater than or equal to the target's IV. This currently does not work with `social` mode and only works if the given `url` has this information. (default: 100)
 * `time_mask` - The time mask used (if `expiration.format` is a full date). The default mask is '%Y-%m-%d %H:%M:%S'.
+* `cooldown_enabled` - Do we set the sniper on a cool down of a random time after snipping? This might help avoiding bans.
+* `loiter_after_snipe` - Do we wait a random time after sniping (aside of the above cooldown)? This might also help avoiding bans.
 * `order` - The order on which you want to snipe. This can be one or multiple of the following values (default: [`missing`, `vip`, `priority`]):
    - `iv` - Order by IV, if any. See `special_iv`.
    - `vip` - Order by VIP.
@@ -847,7 +871,7 @@ This task is an upgrade version of the MoveToMapPokemon task. It will fetch poke
                     "name": { "param": "pokemon" },
                     "latitude": { "param": "cords" },
                     "longitude": { "param": "cords" },
-                    "expiration": { "param": "timeend", "format": "milliseconds" }
+                    "expiration": { "param": "timeend", "format": "seconds" }
                 }
             }
         ],
@@ -880,13 +904,27 @@ This task is an upgrade version of the MoveToMapPokemon task. It will fetch poke
 ### Description
 [[back to top](#table-of-contents)]
 
-Walk to the specified locations loaded from .gpx or .json file. It is highly recommended to use website such as [GPSies](http://www.gpsies.com) which allow you to export your created track in JSON file. Note that you'll have to first convert its JSON file into the format that the bot can understand. See [Example of pier39.json] below for the content. I had created a simple python script to do the conversion.
+Walk to the specified locations loaded from .gpx or .json file. It is highly
+recommended to use website such as [GPSies](http://www.gpsies.com) which allow
+you to export your created track in JSON file. Note that you'll have to first
+convert its JSON file into the format that the bot can understand. See [Example
+of pier39.json] below for the content. I had created a simple python script to
+do the conversion.
 
-The json file can contain for each point an optional `loiter` field. This
-indicated the number of seconds the bot should loiter after reaching the point.
+The `location` fields in the `.json` file can also contain a street address. In
+this case the `location` is interpreted by the Google Maps API.
+
+The json file can contain for each point an optional `wander` field. This
+indicated the number of seconds the bot should wander after reaching the point.
 During this time, the next Task in the configuration file is executed, e.g. a
 MoveToFort task. This allows the bot to walk around the waypoint looking for
 forts for a limited time.
+
+The `loiter` field, also optional for each point in the json file, works
+similarly to the `wander` field. The difference is that with `loiter` the
+next `Task` in the configuration file is /not/ executed, meaning the bot
+will wait, without moving, at the point in the json file with the `loiter`
+option.
 
 ### Options
 [[back to top](#table-of-contents)]
@@ -898,13 +936,14 @@ forts for a limited time.
    - `first` - The bot will start at the first point of the path.
    - `closest` - The bot will start the path at the point which is the closest to the current bot location.
 * `path_file` - "/path/to/your/path.json"
+* `disable_location_output` - true,false. Set to true if you do not want to see follow path updating information. Default false.
 
 ### Notice
-If you use the `single` `path_mode` without e.g. a `MoveToFort` task, your bot 
+If you use the `single` `path_mode` without e.g. a `MoveToFort` task, your bot
 with /not move at all/ when the path is finished. Similarly, if you use the
-`loiter` option in your json path file without a following `MoveToFort` or
-similar task, your bot will not move during the loitering period. Please
-make sure, when you use `single` mode or the `loiter` option, that another
+`wander` option in your json path file without a following `MoveToFort` or
+similar task, your bot will not move during the wandering period. Please
+make sure, when you use `single` mode or the `wander` option, that another
 move-type task follows the `FollowPath` task in your `config.json`.
 
 ### Sample Configuration
@@ -1066,6 +1105,39 @@ Available `items` :
 2016-08-20 18:56:22,754 [UpdateLiveInventory] [INFO] [show_inventory] Items: 335/350 | Pokeballs: 8 | GreatBalls: 186 | UltraBalls: 0 | RazzBerries: 51 | LuckyEggs: 3
 ```
 
+## UpdateHashStats Settings
+[[back to top](#table-of-contents)]
+
+### Description
+[[back to top](#table-of-contents)]
+
+Periodically displays the hash stats in the terminal.
+
+### Options
+[[back to top](#table-of-contents)]
+
+* `min_interval` : The minimum interval at which the stats are displayed, in seconds (defaults to 60 seconds). The update interval cannot be accurate as workers run synchronously.
+* `stats` : An array of items to display and their display order (implicitly), see available items below (defaults to ["period", "remaining", "maximum", "expiration"]).
+
+### Sample configuration
+[[back to top](#table-of-contents)]
+```json
+{
+    "type": "UpdateHashStats",
+    "config": {
+        "enabled": true,
+        "min_interval": 60,
+        "stats": ["period", "remaining", "maximum", "expiration"]
+    }
+}
+```
+
+### Example console output
+[[back to top](#table-of-contents)]
+```
+[2017-04-03 17:55:15] [MainThread] [UpdateHashStats] [INFO] Period: 2017-04-03 09:56:37 | Remaining: 147 | Maximum: 150 | Expiration: 2017-04-15 06:21:11
+```
+
 ## Random Pause
 [[back to top](#table-of-contents)]
 
@@ -1078,7 +1150,7 @@ Simulates the random pause of the day (speaking to someone, getting into a store
 - `min_interval`: (HH:MM:SS) the minimum interval between each pause
 - `max_interval`: (HH:MM:SS) the maximum interval between each pause
 
-###Example Config
+### Example Config
 ```
 {
   "type": "RandomPause",
@@ -1091,7 +1163,7 @@ Simulates the random pause of the day (speaking to someone, getting into a store
 }
 ```
 
-##Egg Incubator
+## Egg Incubator
 [[back to top](#table-of-contents)]
 
 Configure how the bot should use the incubators.
@@ -1101,7 +1173,7 @@ Configure how the bot should use the incubators.
 - `infinite`: ([2], [2,5], [2,5,10], []) the type of egg the infinite (ie. unbreakable) incubator(s) can incubate. If set to [2,5], the incubator(s) can only incubate the 2km and 5km eggs. If set to [], the incubator(s) will not incubate any type of egg.
 - `breakable`: ([2], [2,5], [2,5,10], []) the type of egg the breakable incubator(s) can incubate. If set to [2,5], the incubator(s) can only incubate the 2km and 5km eggs. If set to [], the incubator(s) will not incubate any type of egg.
 
-###Example Config
+### Example Config
 ```
 {
   "type": "IncubateEggs",
@@ -1295,6 +1367,7 @@ After setting a buddy it's not possible to remove it, only change it. So if a bu
 * `buddy_list`: `Default: []`. List of pokemon names that will be used as buddy. If '[]' or 'none', will not use or change buddy.
 * `best_in_family`: `Default: True`. If True, picks best Pokemon in the family (sorted by cp).
 * `candy_limit`: `Default: 0`. Set the candy limit to be rewarded per buddy, when reaching this limit the bot will change the buddy to the next in the list. When candy_limit = 0 or only one buddy in list, it has no limit and never changes buddy.
+* `candy_limit_absolute`: `Default: 0`. Set the absolute candy limit to be rewarded per buddy, when reaching this limit the bot will change the buddy to the next in the list. When candy_limit_absolute = 0 or only one buddy in list, it has no limit and never changes buddy. Use this to stop collecting candy when a candy threshold for your buddy's pokemon family is reached (e.g. 50 for evolving).
 * `force_first_change`: `Default: False`. If True, will try to change buddy at bot start according to the buddy list. If False, will use the buddy already set until candy_limit is reached and then use the buddy list.
 * `buddy_change_wait_min`: `Default: 3`. Minimum time (in seconds) that the buddy change takes.
 * `buddy_change_wait_max`: `Default: 5`. Maximum time (in seconds) that the buddy change takes.
@@ -1311,11 +1384,51 @@ After setting a buddy it's not possible to remove it, only change it. So if a bu
         "best_in_family": true,
         "// candy_limit = 0 means no limit, so it will never change current buddy": {},
         "candy_limit": 0,
+        "candy_limit_absolute": 0,
         "// force_first_change = true will always change buddy at start removing current one": {},
         "force_first_change": false,
         "buddy_change_wait_min": 3,
         "buddy_change_wait_max": 5,
         "min_interval": 120
   }
+}
+```
+
+## PokemonHunter
+[[back to top](#table-of-contents)]
+
+### Description
+[[back to top](#table-of-contents)]
+
+Hunts down nearby Pokemon. Searches for Pokemon to complete the Pokedex, or if a Pokemon is a VIP. Can be set to hunt ALL nearby Pokemon
+
+### Options
+[[back to top](#table-of-contents)]
+
+* `max_distance`: `Default: 2000`. Maxium of meters for the "nearby" part.
+* `hunt_all`: `Default: false`. Should we hunt for ALL nearby Pokemon?
+* `hunt_vip`: `Default: true`. Should we hunt for VIP Pokemon?
+* `hunt_pokedex`: `Default: true`. Should we hunt for Pokemon we need to complete the Pokedex (make family complete)
+* `lock_on_target`: `Default: false`. Should we ignore all other Pokemon while hunting?
+* `lock_vip_only`: `Default: true`. Is the above only used for real VIPs? (Not to complete the Pokedex)
+* `disabled_while_camping`: `Default: true`. Should we stop hunting for nearby Pokemon while sitting at lures?
+* `treat_unseen_as_vip`: `Default: true`. Should we treat unseen Pokemons as VIPs?
+
+### Sample configuration
+[[back to top](#table-of-contents)]
+```json
+{
+    "type": "PokemonHunter",
+    "config": {
+        "enabled": true,
+        "max_distance": 1500,
+        "hunt_all": false,
+        "hunt_vip": true,
+        "hunt_pokedex": true,
+        "lock_on_target": false,
+        "lock_vip_only": true,
+        "disabled_while_camping": true,
+        "treat_unseen_as_vip": true
+    }
 }
 ```

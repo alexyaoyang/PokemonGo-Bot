@@ -150,7 +150,7 @@ class Candies(_BaseInventoryComponent):
 
     @classmethod
     def family_id_for(cls, pokemon_id):
-        return Pokemons.first_evolution_id_for(pokemon_id)
+        return Pokemons.candyid_for(pokemon_id)
 
     def get(self, pokemon_id):
         family_id = self.family_id_for(pokemon_id)
@@ -170,6 +170,12 @@ class Pokedex(_BaseInventoryComponent):
 
     def captured(self, pokemon_id):
         return self.seen(pokemon_id) and self._data.get(pokemon_id, {}).get('times_captured', 0) > 0
+
+    def shiny_seen(self, pokemon_id):
+        return self._data.get(pokemon_id, {}).get('encountered_shiny', False)
+
+    def shiny_captured(self, pokemon_id):
+        return self._data.get(pokemon_id, {}).get('captured_shiny', False)
 
 
 class Item(object):
@@ -450,6 +456,9 @@ class Pokemons(_BaseInventoryComponent):
     @classmethod
     def name_for(cls, pokemon_id):
         return cls.data_for(pokemon_id).name
+    @classmethod
+    def candyid_for(cls, pokemon_id):
+        return cls.data_for(pokemon_id).candyid
 
     @classmethod
     def id_for(cls, pokemon_name):
@@ -483,6 +492,14 @@ class Pokemons(_BaseInventoryComponent):
     @classmethod
     def evolution_cost_for(cls, pokemon_id):
         return cls.data_for(pokemon_id).evolution_cost
+
+    @classmethod
+    def evolution_item_for(cls, pokemon_id):
+        return cls.data_for(pokemon_id).evolution_item
+
+    @classmethod
+    def evolution_items_needed_for(cls, pokemon_id):
+        return cls.data_for(pokemon_id).evolution_item_needed
 
     def parse(self, item):
         if 'is_egg' in item:
@@ -750,7 +767,6 @@ class Candy(object):
             raise Exception('Must add positive amount of candy')
         self.quantity += amount
 
-
 class Egg(object):
     def __init__(self, data):
         self._data = data
@@ -820,6 +836,9 @@ class PokemonInfo(object):
 
         # Number of candies for the next evolution (if possible)
         self.evolution_cost = 0
+        # Next evolution doesn't need a special item
+        self.evolution_item = None
+        self.evolution_item_needed = 0
         # next evolution flag
         self.has_next_evolution = 'Next evolution(s)' in data \
                                   or 'Next Evolution Requirements' in data
@@ -827,12 +846,17 @@ class PokemonInfo(object):
         self.last_evolution_ids = [self.id]
         # ids of the next possible evolutions (one level only)
         self.next_evolution_ids = []
-        # ids of all available next evolutions in the family
+        #candies
+        self.candyid = int(data['Candy']['FamilyID'])
+        self.candyName = (data['Candy']['Name'])
         self.next_evolutions_all = []
         if self.has_next_evolution:
             ids = [int(e['Number']) for e in data['Next evolution(s)']]
             self.next_evolutions_all = ids
             self.evolution_cost = int(data['Next Evolution Requirements']['Amount'])
+            if 'EvoItem' in data['Next Evolution Requirements']:
+                self.evolution_item = int(data['Next Evolution Requirements']['EvoItem'])
+                self.evolution_item_needed = int(data['Next Evolution Requirements']['EvoItemNeeded'])
 
     @property
     def family_id(self):
@@ -927,10 +951,17 @@ class Pokemon(object):
         self._data = data
         # Unique ID for this particular Pokemon
         self.unique_id = data.get('id', 0)
+        # Let's try this
+        self.encounter_id = data.get('encounter_id')
         # Id of the such pokemons in pokedex
         self.pokemon_id = data['pokemon_id']
         # Static information
         self.static = Pokemons.data_for(self.pokemon_id)
+
+        # Shiny information
+        self.display_data = data.get('pokemon_display')
+        self.shiny = self.display_data.get('shiny', False)
+        # self.form = self.display_data.get('form', )
 
         # Combat points value
         self.cp = data['cp']
@@ -950,7 +981,7 @@ class Pokemon(object):
         # Maximum health points
         self.hp_max = data['stamina_max']
         # Current health points
-        self.hp = data.get('stamina', self.hp_max)
+        self.hp = data.get('stamina', 0) #self.hp_max)
         assert 0 <= self.hp <= self.hp_max
 
         # Individial Values of the current specific pokemon (different for each)
@@ -988,7 +1019,7 @@ class Pokemon(object):
         self.cp_exact = _calc_cp(
             base_attack, base_defense, base_stamina,
             self.iv_attack, self.iv_defense, self.iv_stamina, self.cp_m)
-        assert max(int(self.cp_exact), 10) == self.cp
+        #assert max(int(self.cp_exact), 10) == self.cp
 
         # Percent of maximum possible CP
         self.cp_percent = self.cp_exact / self.static.max_cp
@@ -1007,8 +1038,14 @@ class Pokemon(object):
         self.nickname = self.nickname_raw or self.name
 
     def can_evolve_now(self):
-        return self.has_next_evolution() and \
-               self.candy_quantity >= self.evolution_cost
+        if self.evolution_item is None:
+            return self.has_next_evolution() and \
+                self.candy_quantity >= self.evolution_cost
+        else:
+            evo_items = items().get(self.evolution_item).count
+            return self.has_next_evolution() and \
+                self.candy_quantity >= self.evolution_cost and \
+                evo_items >= self.evolution_items_needed
 
     def has_next_evolution(self):
         return self.static.has_next_evolution
@@ -1046,6 +1083,14 @@ class Pokemon(object):
     @property
     def evolution_cost(self):
         return self.static.evolution_cost
+
+    @property
+    def evolution_item(self):
+        return self.static.evolution_item
+
+    @property
+    def evolution_items_needed(self):
+        return self.static.evolution_item_needed
 
     @property
     def iv_display(self):

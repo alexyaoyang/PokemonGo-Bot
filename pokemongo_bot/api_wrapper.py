@@ -4,14 +4,16 @@ import logging
 import random, base64, struct
 import hashlib
 import os
+import urllib
+import sys
 from pgoapi.exceptions import (ServerSideRequestThrottlingException,
                                NotLoggedInException, ServerBusyOrOfflineException,
-                               NoPlayerPositionSetException, EmptySubrequestChainException,
-                               UnexpectedResponseException)
+                               NoPlayerPositionSetException, HashingOfflineException,
+                               UnexpectedResponseException, BadHashRequestException)
 from pgoapi.pgoapi import PGoApi
 from pgoapi.pgoapi import PGoApiRequest
 from pgoapi.pgoapi import RpcApi
-from pgoapi.protos.POGOProtos.Networking.Requests.RequestType_pb2 import RequestType
+from pgoapi.protos.pogoprotos.networking.requests.request_type_pb2 import RequestType
 from pgoapi.utilities import get_time
 from .human_behaviour import sleep, gps_noise_rng
 from pokemongo_bot.base_dir import _base_dir
@@ -27,6 +29,8 @@ class ApiWrapper(PGoApi, object):
     def __init__(self, config=None):
         self.config = config
         self.gen_device_id()
+        self.logger = logging.getLogger(__name__)
+
         device_info = {
             "device_id": ApiWrapper.DEVICE_ID,
             "device_brand": 'Apple',
@@ -39,7 +43,8 @@ class ApiWrapper(PGoApi, object):
         }
 
         PGoApi.__init__(self, device_info=device_info)
-
+        if not self.config.hashkey is None:
+            PGoApi.activate_hash_server(self,self.config.hashkey)
         # Set to default, just for CI...
         self.actual_lat, self.actual_lng, self.actual_alt = PGoApi.get_position(self)
         self.teleporting = False
@@ -90,17 +95,25 @@ class ApiWrapper(PGoApi, object):
     def login(self, provider, username, password):
         # login needs base class "create_request"
         self.useVanillaRequest = True
+
         try:
             PGoApi.set_authentication(
-                    self,
-                    provider,
-                    username=username,
-                    password=password
-                    )
+                self,
+                provider,
+                username=username,
+                password=password
+            )
         except:
             raise
-
-        response = PGoApi.app_simulation_login(self)
+        try:
+            response = PGoApi.app_simulation_login(self)
+        except BadHashRequestException:
+            self.logger.warning("You hashkey seems to have expired or is not accepted!")
+            self.logger.warning("Please set a valid hash key in your auth JSON file!")
+            exit(-3)
+            raise
+        except:
+            raise
         # cleanup code
         self.useVanillaRequest = False
         return response
@@ -153,7 +166,14 @@ class ApiRequest(PGoApiRequest):
         return True
 
     def _call(self):
-        return PGoApiRequest.call(self)
+        for _attempt in range(10):
+            try:
+                return PGoApiRequest.call(self)
+            except:
+                self.log.info('Request failed, retrying.')
+                sleep(1)
+            else:
+                break
 
     def _pop_request_callers(self):
         r = self.request_callers
@@ -204,12 +224,23 @@ class ApiRequest(PGoApiRequest):
             self._req_method_list = [req_method for req_method in api_req_method_list]
             should_throttle_retry = False
             should_unexpected_response_retry = False
+            hashing_offline = False
+
             try:
                 result = self._call()
             except ServerSideRequestThrottlingException:
                 should_throttle_retry = True
+            except HashingOfflineException:
+                hashing_offline = True
             except UnexpectedResponseException:
                 should_unexpected_response_retry = True
+            except:
+                should_unexpected_response_retry = True
+
+            if hashing_offline:
+                self.logger.warning('Hashing server issue, retrying in 5 Secs...')
+                sleep(5)
+                continue
 
             if should_throttle_retry:
                 throttling_retry += 1

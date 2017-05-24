@@ -1,5 +1,9 @@
 # PokemonGo-Bot
-[PokemonGo-Bot](https://github.com/PokemonGoF/PokemonGo-Bot) is a project created by the [PokemonGoF](https://github.com/PokemonGoF) team.
+[PokemonGo-Bot](https://github.com/PokemonGoF/PokemonGo-Bot) is a project created by the [PokemonGoF](https://github.com/PokemonGoF) team. Since no public API available for now, a patch to use HASH-Server was applied. PokemonGoF is not part of HASH-Server dev team and has no connection with it.
+
+# Donation
+
+Bitcoin: 1PJMCx9NNQRasQYaa4MMff9yyNFffhHgLu
 
 ## Table of Contents
 - [Installation](https://github.com/PokemonGoF/PokemonGo-Bot/blob/dev/docs/installation.md)
@@ -16,23 +20,27 @@ The project is currently setup in two main branches:
 - `dev` also known as `beta` - This is where the latest features are, but you may also experience some issues with stability/crashes.
 - `master` also known as `stable` - The bot 'should' be stable on this branch, and is generally well tested.
 
-## Support
-### Development Channel
-[![Join the chat at https://gitter.im/pikabot-org/Lobby](https://badges.gitter.im/pikabot-org/db.svg)](https://gitter.im/pikabot-org/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+## Slack Channel
 
 ### Configuration issues/help
 If you need any help please don't create an issue as we have a great community on Slack. You can count on the community in [#help](https://pokemongo-bot.slack.com/messages/help/) channel.
  - [Click here to signup (first time only)](https://pokemongo-bot.herokuapp.com)
  - [Join here if you're already a member](https://pokemongo-bot.slack.com/messages/general/)
 
-###[Bugs / Issues](https://github.com/PokemonGoF/PokemonGo-Bot/issues?q=is%3Aissue+sort%3Aupdated-desc)
+### Development Channel 
+ - #dev channel in slack
+
+## Discord
+  - [Click here to join discord server](https://discord.gg/n3g5puF)
+
+### [Bugs / Issues](https://github.com/PokemonGoF/PokemonGo-Bot/issues?q=is%3Aissue+sort%3Aupdated-desc)
 If you discover a bug in the bot, please [search our issue tracker](https://github.com/PokemonGoF/PokemonGo-Bot/issues?q=is%3Aissue+sort%3Aupdated-desc) first. If it hasn't been reported, please [create a new issue](https://github.com/PokemonGoF/PokemonGo-Bot/issues/new) and ensure you follow the template guide so that our team can assist you as quickly as possible.
 
-###[Feature Requests](https://github.com/PokemonGoF/PokemonGo-Bot/labels/Feature%20Request)
+### [Feature Requests](https://github.com/PokemonGoF/PokemonGo-Bot/labels/Feature%20Request)
 If you have a great idea to improve the bot, please [search our feature tracker](https://github.com/PokemonGoF/PokemonGo-Bot/labels/Feature%20Request) first to ensure someone else hasn't already come up with the same great idea.  If it hasn't been requested, please [create a new request](https://github.com/PokemonGoF/PokemonGo-Bot/issues/new) and ensure you follow the template guide so that it doesnt get lost with the bug reports.
 While you're there vote on other feature requests to let the devs know what is most important to you.
 
-###[Pull Requests](https://github.com/PokemonGoF/PokemonGo-Bot/pulls)
+### [Pull Requests](https://github.com/PokemonGoF/PokemonGo-Bot/pulls)
 If you'd like to make your own changes, make sure you follow the pull request template, and ensure your PR is made against the 'dev' branch.
 
 If this is your first time making a PR or aren't sure of the standard practice of making a PR, here are some articles to get you started.
@@ -69,7 +77,7 @@ If you do not want any data to be gathered, you can turn off this feature by set
 
 ## Credits
 - [tejado](https://github.com/tejado) many thanks for the API
-- [U6 Group](http://pgoapi.com) for the U6
+- [pogodevorg](https://github.com/pogodevorg/pgoapi) Without keyphact's coordination, this would not gonna happan again.
 - [Mila432](https://github.com/Mila432/Pokemon_Go_API) for the login secrets
 - [elliottcarlson](https://github.com/elliottcarlson) for the Google Auth PR
 - [AeonLucid](https://github.com/AeonLucid/POGOProtos) for improved protos
@@ -82,7 +90,7 @@ If you do not want any data to be gathered, you can turn off this feature by set
  * ethervoid
  * Bashin
  * tstumm
- * TheGoldenXY
+ * AdaptCharm
  * Reaver01
  * rarshonsky
  * earthchie
@@ -158,6 +166,7 @@ If you do not want any data to be gathered, you can turn off this feature by set
  * bruno-kenji
  * Gobberwart
  * javajohnHub
+ * kolinkorr839
 
 ## Disclaimer
 ©2016 Niantic, Inc. ©2016 Pokémon. ©1995–2016 Nintendo / Creatures Inc. / GAME FREAK inc. © 2016 Pokémon/Nintendo Pokémon and Pokémon character names are trademarks of Nintendo. The Google Maps Pin is a trademark of Google Inc. and the trade dress in the product design is a trademark of Google Inc. under license to The Pokémon Company. Other trademarks are the property of their respective owners.

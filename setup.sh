@@ -52,9 +52,12 @@ Input Location
 " location
 read -p "Input Google API Key (gmapkey)
 " gmapkey
+read -p "Input Hashing servers key  (hashkey)
+" hashkey
 [[ $auth = "2" || $auth = "ptc" ]] && auth="ptc" || auth="google"
 sed -e "s/YOUR_USERNAME/$username/g" -e "s/YOUR_PASSWORD/$password/g" \
   -e "s/SOME_LOCATION/$location/g" -e "s/GOOGLE_MAPS_API_KEY/$gmapkey/g" \
+  -e "s/YOUR_PURCHASED_HASH_KEY/$hashkey/g"  \
   -e "s/google/$auth/g" configs/auth.json.example > configs/auth.json
 echo "Edit ./configs/auth.json to modify auth or location."
 }
@@ -84,7 +87,7 @@ if [ "$(uname -s)" == "Darwin" ]
 then
 echo "You are on Mac OS"
 brew update
-brew install --devel protobuf
+#brew install --devel protobuf
 elif [ $(uname -s) == CYGWIN* ]
 then
 echo "You are on Cygwin"
@@ -101,6 +104,13 @@ then
 echo "You are on Debian/Ubuntu"
 sudo apt-get update
 sudo apt-get -y install python python-pip python-dev gcc make git
+elif [ -e /etc/fedora-release ]
+then
+echo "You are on Fedora"
+sudo dnf update
+sudo dnf -y install redhat-rpm-config gcc make git
+sudo dnf -y install python2 python-devel python-virtualenv
+sudo pip install --upgrade pip
 elif [ -x "$(command -v yum)" ]
 then
 echo "You are on CentOS/RedHat"
@@ -125,7 +135,10 @@ echo "Please check if you have  python pip gcc make  installed on your device."
 echo "Wait 5 seconds to continue or Use ctrl+c to interrupt this shell."
 sleep 5
 fi
+if [ ! -e /etc/fedora-release ]
+then
 easy_install virtualenv
+fi
 Pokebotreset
 Pokebotupdate
 Pokebotencrypt
